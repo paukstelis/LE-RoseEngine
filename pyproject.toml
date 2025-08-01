@@ -1,0 +1,40 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "LE-RoseEngine"
+version = "0.1.0"
+description = "TODO"
+authors = [
+    {name = "You", email = "transpirationturning@gmail.com"}
+]
+readme = {file = "README.md", content-type = "markdown"}
+dynamic = [
+    "license"
+]
+
+requires-python = ">=3.7, <4"
+
+# any additional requirements (besides OctoPrint) should be listed here
+dependencies = []
+
+[tool.setuptools]
+include-package-data = true
+
+[tool.setuptools.packages.find]
+include = [
+    "LE_roseengine",
+    "LE_roseengine.*"
+]
+
+[project.entry-points."octoprint.plugin"]
+roseengine = "LE_roseengine"
+
+[project.urls]
+Homepage = "https://github.com/paukstelis/LE-RoseEngine"
+
+[project.optional-dependencies]
+develop = [
+    "go-task-bin"
+]

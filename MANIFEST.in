@@ -1,0 +1,4 @@
+include README.md
+recursive-include LE_roseengine/templates *
+recursive-include LE_roseengine/translations *
+recursive-include LE_roseengine/static *
