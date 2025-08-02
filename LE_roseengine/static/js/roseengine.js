@@ -54,13 +54,9 @@ $(function() {
         }
 
         self.onBeforeBinding = function () {
-            self.settings = self.global_settings.settings.plugins.profiler;
+            self.settings = self.global_settings.settings.plugins.roseengine;
             //console.log(self.global_settings);
             self.fetchProfileFiles();
-            $(".laser").hide();
-            $(".wrap").hide();
-            $(".zscan").hide();
-
             self.smooth_points = self.settings.smooth_points;
             self.tool_length = self.settings.tool_length;
             self.increment = self.settings.increment;

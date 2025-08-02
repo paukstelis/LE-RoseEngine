@@ -1,0 +1,52 @@
+<!--roseengine_tab.jinja2 -->
+
+<div id="roseengine_plugin_main" class="row-fluid">
+
+    <div id="roseengine_inputs">
+
+        <div id="plotarea" style="width: 100%; height: 500px;"></div>
+
+        <div style="width: 300px; float: left;">
+            <div>
+                <label for="rosette_file_select">Select Scan File:
+                    <select id="rosette_file_select">
+                        <option value="">Loading...</option>
+                    </select>
+                </label>        
+            </div>
+
+            <div>
+                <label title="The distance from the end of the tool to the center of the B-axis." data-toggle="tooltip" for="toollength">
+                    Rotation center to surface (mm):
+                    <input id="toollength" type="number" value="1" step="any" data-bind="value: tool_length">
+                </label>
+            </div>
+            
+            <div class="laser">
+                <label title="Do a test pass with weak laser power to verify positioning." data-toggle="tooltip" for="test">
+                    Test pass:
+                    <input id="test" type="checkbox" checked data-bind="checked: test">
+                </label>
+            </div>
+
+            <div class="wrap">
+                <label title="This will project the gcode onto the work piece. With this unchecked, the gcode is wrapped and includes radial fall-off of the width." data-toggle="tooltip" for="ra">
+                    Project:
+                    <input id="ra" type="checkbox" checked data-bind="checked: radius_adjust">
+                </label>
+            </div>
+
+            <div class="facet">
+                <label title="This inverts the cut depth to make lobes instead of facets." data-toggle="tooltip" for="facetinvert">
+                    Invert depths:
+                    <input id="facetinvert" type="checkbox" checked data-bind="checked: facet_invert">
+                </label>
+            </div>
+        </div>
+    </div>
+<br>
+    <div id="roseengine_actions" style="clear: both; margin-top: 20px;">
+        <button id="write_gcode_button" class="btn btn-primary" data-bind="click: writeGCode">Write Job</button>
+        <button id="target_button" class="btn btn-primary" data-bind="click: gotoposition">Go to Target</button>
+    </div>
+</div>
