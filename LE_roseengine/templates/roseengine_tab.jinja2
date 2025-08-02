@@ -16,32 +16,33 @@
             </div>
 
             <div>
-                <label title="The distance from the end of the tool to the center of the B-axis." data-toggle="tooltip" for="toollength">
-                    Rotation center to surface (mm):
-                    <input id="toollength" type="number" value="1" step="any" data-bind="value: tool_length">
+                <label title="RPM" data-toggle="tooltip" for="rpm">
+                    RPM:
+                    <input id="rpm" type="number" value="1" step="any" data-bind="value: rpm">
                 </label>
             </div>
             
-            <div class="laser">
-                <label title="Do a test pass with weak laser power to verify positioning." data-toggle="tooltip" for="test">
-                    Test pass:
-                    <input id="test" type="checkbox" checked data-bind="checked: test">
+            <div>
+                <label title="forward" data-toggle="tooltip" for="forward">
+                    Spindle forward:
+                    <input id="forward" type="checkbox" checked data-bind="checked: forward">
                 </label>
             </div>
 
-            <div class="wrap">
-                <label title="This will project the gcode onto the work piece. With this unchecked, the gcode is wrapped and includes radial fall-off of the width." data-toggle="tooltip" for="ra">
-                    Project:
-                    <input id="ra" type="checkbox" checked data-bind="checked: radius_adjust">
+            <div>
+                <label title="The percent step over at the largest diameter of the piece based on the input tool diameter." data-toggle="tooltip" for="amp">
+                    Amplitude scale factor:
+                    <input id="amp" type="number" value="0.5" max="1.0" step="any" data-bind="value: amp">
                 </label>
             </div>
 
-            <div class="facet">
+            <div>
                 <label title="This inverts the cut depth to make lobes instead of facets." data-toggle="tooltip" for="facetinvert">
                     Invert depths:
                     <input id="facetinvert" type="checkbox" checked data-bind="checked: facet_invert">
                 </label>
             </div>
+
         </div>
     </div>
 <br>
