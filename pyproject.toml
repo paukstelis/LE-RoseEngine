@@ -17,7 +17,7 @@ dynamic = [
 requires-python = ">=3.7, <4"
 
 # any additional requirements (besides OctoPrint) should be listed here
-dependencies = []
+dependencies = ["numpy"]
 
 [tool.setuptools]
 include-package-data = true
