@@ -17,7 +17,8 @@ $(function() {
         self.start_coord = [0,0,0];
         self.forward = ko.observable(true);
 
-
+        tab = document.getElementById("tab_plugin_roseengine_link");
+        tab.innerHTML = tab.innerHTML.replaceAll("Roseengine Plugin", "Rose Engine");
         // assign the injected parameters, e.g.:
         // self.loginStateViewModel = parameters[0];
         // self.settingsViewModel = parameters[1];
@@ -90,8 +91,16 @@ $(function() {
                 title: 'Rosette',
                 polar: {
                     radialaxis: {
-                      visible: true,
+                      visible: false,
                       autorange: true,
+                      showline: false, // Hides the axis line
+                      zeroline: false
+                    },
+                    angularaxis: {
+                      showline: false, // Hides the axis line
+                      zeroline: false,
+                      rotation: 180,
+                      direction: "clockwise"
                     }
                 }
             };
@@ -135,6 +144,40 @@ $(function() {
                 })
                 .fail(function() {
                     console.error("File info not transmitted");
+                });
+
+        };
+
+        self.startjob = function() {
+
+            var data = {
+                rpm: self.rpm(),
+                amp: self.amp(),
+                forward: self.forward(),
+            };
+
+            OctoPrint.simpleApiCommand("roseengine", "start_job", data)
+                .done(function(response) {
+                    console.log("GCode written successfully.");
+                })
+                .fail(function() {
+                    console.error("Failed to write GCode.");
+                });
+
+        };
+
+        self.stopjob = function() {
+
+            var data = {
+                stop: true
+            };
+
+            OctoPrint.simpleApiCommand("roseengine", "stop_job", data)
+                .done(function(response) {
+                    console.log("GCode written successfully.");
+                })
+                .fail(function() {
+                    console.error("Failed to write GCode.");
                 });
 
         };

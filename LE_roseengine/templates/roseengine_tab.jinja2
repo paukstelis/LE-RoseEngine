@@ -35,19 +35,11 @@
                     <input id="amp" type="number" value="0.5" max="1.0" step="any" data-bind="value: amp">
                 </label>
             </div>
-
-            <div>
-                <label title="This inverts the cut depth to make lobes instead of facets." data-toggle="tooltip" for="facetinvert">
-                    Invert depths:
-                    <input id="facetinvert" type="checkbox" checked data-bind="checked: facet_invert">
-                </label>
-            </div>
-
         </div>
     </div>
 <br>
     <div id="roseengine_actions" style="clear: both; margin-top: 20px;">
-        <button id="write_gcode_button" class="btn btn-primary" data-bind="click: writeGCode">Write Job</button>
-        <button id="target_button" class="btn btn-primary" data-bind="click: gotoposition">Go to Target</button>
+        <button id="start_job_button" class="btn btn-primary" data-bind="click: startjob">Start</button>
+        <button id="stop_job_button" class="btn btn-primary" data-bind="click: stopjob">Stop</button>
     </div>
 </div>
