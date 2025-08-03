@@ -64,9 +64,18 @@ $(function() {
 
         };
 
-        $("#rosette_file_select").on("change", function () {
-            var filePath = $("#rosette_file_select option:selected").attr("path");
-            self.name = $("#rosette_file_select option:selected").attr("value");
+        $("#rock_file_select").on("change", function () {
+            var filePath = $("#rock_file_select option:selected").attr("path");
+            self.name = $("#rock_file_select option:selected").attr("value");
+            if (!filePath) return;
+
+            self.load_rosette(filePath);
+            
+        });
+
+        $("#pump_file_select").on("change", function () {
+            var filePath = $("#pump_file_select option:selected").attr("path");
+            self.name = $("#pump_file_select option:selected").attr("value");
             if (!filePath) return;
 
             self.load_rosette(filePath);
