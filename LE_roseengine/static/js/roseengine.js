@@ -132,6 +132,23 @@ $(function() {
                 });
         };
 
+        self.jog = function(dir) {
+            
+
+            var data = {
+                direction: dir,
+            };
+
+            OctoPrint.simpleApiCommand("roseengine", "jog", data)
+                .done(function(response) {
+                    console.log("File info transmitted");
+                })
+                .fail(function() {
+                    console.error("File info not transmitted");
+                });
+
+        };
+
         self.load_rosette = function(filePath) {
             var data = {
                 filepath: filePath,
@@ -173,6 +190,22 @@ $(function() {
             };
 
             OctoPrint.simpleApiCommand("roseengine", "stop_job", data)
+                .done(function(response) {
+                    console.log("GCode written successfully.");
+                })
+                .fail(function() {
+                    console.error("Failed to write GCode.");
+                });
+
+        };
+
+        self.gotostart = function() {
+
+            var data = {
+                reset: true
+            };
+
+            OctoPrint.simpleApiCommand("roseengine", "goto_start", data)
                 .done(function(response) {
                     console.log("GCode written successfully.");
                 })

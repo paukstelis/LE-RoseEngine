@@ -46,12 +46,13 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
         self.last_position = None
         self.chunk = 10
         self.buffer = 0
+        self.buffer_received = True
         self.modifiers = {"amp": 1, "phase": 0, "forward": True}
 
         self.jobThread = None
         self.buffer = None
         self.feedcontrol =  {"current": 0, "next": 0}
-        self.start_coords = {}
+        self.start_coords = {"x": None, "z": None, "a": None}
         self.ms_threshold = 100
 
         self.rpm = 0
@@ -109,7 +110,8 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
         self.current_z = payload["z"]
         self.current_a = payload["a"]
         self.buffer = payload["bf"]
-        
+        #self._logger.info(f"buffer from payload {self.buffer}")
+        self.buffer_received = True
     
     def create_working_path(self, rosette):
         phase = self.phase
@@ -124,6 +126,33 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
 
         return newradii
     
+    def _update_injection(self, cmd: str, axis_val: tuple) -> str:
+        axis, delta = axis_val
+        # Regex pattern to find axis (e.g., A, Z, etc.)
+        pattern = re.compile(rf'({axis})([-+]?[0-9]*\.?[0-9]+)')
+        orig_cmd = cmd
+        match = pattern.search(cmd)
+        if match:
+            # Axis already exists, add delta to existing value
+            old_val = float(match.group(2))
+            new_val = old_val + delta
+            # Replace old value with new value (formatted to 4 decimal places)
+            cmd = pattern.sub(f"{axis}{new_val:.4f}", cmd, count=1)
+        else:
+            # Axis doesn't exist, insert before F command
+            insert_pattern = re.compile(r'(F[-+]?[0-9]*\.?[0-9]+)')
+            insert_match = insert_pattern.search(cmd)
+            insert_str = f"{axis}{delta:.4f} "
+            if insert_match:
+                # Insert before F
+                idx = insert_match.start()
+                cmd = cmd[:idx] + insert_str + cmd[idx:]
+            else:
+                # Append at end if F not found
+                cmd += ' ' + insert_str.strip()
+        self._logger.info(f"injected, orig: {orig_cmd}, new: {cmd}")
+        return cmd
+
     def resample_path_to_polar(self, matrix, path: Path, center=(0, 0), points=720):
         total_length = path.length()
         step = total_length / points
@@ -182,78 +211,59 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
 
     def _job_thread(self):  
         self._logger.info("Starting job thread")
-        tms = round(time.time() * 1000)
-        self.feedcontrol["current"] = tms
-        degrees_sec = (self.rpm * 360) / 60
-        degrees_chunk = self.chunk * self.a_inc
-        next_interval = int(degrees_chunk / degrees_sec * 1000)  # in milliseconds
-        self.feedcontrol["next"] = self.feedcontrol["current"] + next_interval
+        bf_target = 80
         dir = "" if self.forward else "-"
-        self._logger.info(f"Parameters, degrees/sec: {degrees_sec}, degrees/chunk {degrees_chunk}, tms {tms}, next_interval {next_interval}")
-        self._logger.info(self.feedcontrol)
+        
         while self.running:
             #A-axis reset
             cmdlist = []
             cmdlist.append("G92 A0")
+            self.buffer = 0
+            tms = round(time.time() * 1000)
+            self.feedcontrol["current"] = tms
+            degrees_sec = (self.rpm * 360) / 60
+            degrees_chunk = self.chunk * self.a_inc
+            next_interval = int(degrees_chunk / degrees_sec * 1000)  # in milliseconds
+            self.feedcontrol["next"] = self.feedcontrol["current"] + next_interval
+
             for i in range(0, len(self.rock_work), self.chunk):
                 feed = (360/self.a_inc) * self.rpm
                 cmdchunk = self.rock_work[i:i+self.chunk]
+                #self.buffer = 0
                 for cmd in cmdchunk:
-                    cmdlist.append(f"G93 G91 G0 A{dir}{self.a_inc} Z{cmd:0.4f} F{feed:0.1f}")
+                    cmdlist.append(f"G93 G91 G1 A{dir}{self.a_inc} Z{cmd:0.4f} F{feed:0.1f}")
                 #self._logger.info(cmdlist)
                 if self.inject:
-                    cmdlist.append(self.inject)
+                    cmdlist[-1] = self._update_injection(cmdlist[-1], self.inject)
                     self.inject = None
                 # Loop until we are ready to send the next chunk
                 tms = round(time.time() * 1000)
-                while self.feedcontrol["next"] - tms > self.ms_threshold or self.buffer < round(self.chunk/2):
+                while self.feedcontrol["next"] - tms > 10 or self.buffer < bf_target:
                         tms = round(time.time() * 1000)
                         if not self.running:
                             break
-                        #self._logger.info("in loop")
-                        #time.sleep(0.01)
-                # Reset timestamps and send command chunk, recalculate next interval if RPM has changed
+
+                self._logger.info(f"buffer is now at {self.buffer}")
                 self._printer.commands(cmdlist)
+                self.buffer_received = False
                 degrees_sec = (self.rpm * 360) / 60
                 next_interval = int(degrees_chunk / degrees_sec * 1000)
                 self.feedcontrol["current"] = round(time.time() * 1000)
                 self.feedcontrol["next"] = self.feedcontrol["current"] + next_interval
-                
                 cmdlist = []
                 self.last_position = i
                 if not self.running:
                     break
         self._logger.info("Thread ended")
 
-        """        
-        while self.running:
-            #A-axis reset
-            cmdlist.append("G92 A0")
-            for i in range(0, len(self.rock_work), self.chunk):
-                #feed = self.a_inc * 360 * self.rpm
-                feed = (360/self.a_inc) * self.rpm
-                cmdchunk = self.rock_work[i:i+self.chunk]
-                for cmd in cmdchunk:
-                    cmdlist.append(f"G93 G91 G0 A{self.a_inc} Z{cmd:0.2f} F{feed:0.1f}")
-                if self.inject:
-                    cmdlist.append(self.inject)
-                    self.inject = None
-                while self.buffer < 95:
-                    time.sleep(0.1)
-                self._printer.send_command(cmdlist)
-                cmdlist = []
-                self.last_position = i
-                time.sleep(0.01)
-                if not self.running:
-                    break
-            if not self.running:
-                break
-        """
-
     def _start_job(self):
+        if self.running:
+            return
         self.rock_work = self.create_working_path(self.rock_main)
         self._logger.info(f"Rock work list: {self.rock_work}")
-        self.start_coords = {"x": self.current_x, "z": self.current_z,"a": self.current_a}
+        self.start_coords["x"] = self.current_x
+        self.start_coords["z"] = self.current_z
+        self.start_coords["a"] = self.current_a
         self.running = True
         self._logger.info(self.start_coords)
         self.jobThread = threading.Thread(target=self._job_thread).start()
@@ -270,7 +280,7 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
         return dict(
             start_job=[],
             stop_job=[],
-            move=["direction", "distance", "axis"],
+            jog=[],
             load_rosette=[],
             get_arc_length=[],
             goto_start=[]
@@ -300,7 +310,7 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
             return
         
         if command == "start_job":
-            self.rpm = int(data["rpm"])
+            self.rpm = float(data["rpm"])
             self.amp = float(data["amp"])
             self.forward = bool(data["forward"])
             self._logger.info("ready to start job")
@@ -310,21 +320,39 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
             self._logger.info("stoping job")
             self._stop_job()
 
-        if command == "move":
-            direction = data.get("direction")
-            distance = float(data.get("distance"))
-            axis = data.get("axis")
-            cmd = f"G94 G91 G21 G0 {axis}{direction}{distance} F1000"
+        if command == "jog":
+            direction = data["direction"]
+            if direction == 'down':
+                dir = "Z"
+                dist = "-1"
+            elif direction == 'up':
+                dir = "Z"
+                dist = "1"
+            elif direction == 'left':
+                dir = "X"
+                dist = "-1"
+            elif direction == 'right':
+                dir = "X"
+                dist = "1"
+
+            cmd = f"G94 G91 G21 G1 {dir}{dist} F1000"
+            #if we are running, we can possibly just add to the last command in the chunk
+            chunk_cmd = (dir, float(dist))
             if self.running:
                 if not self.inject:
-                    self.inject = cmd
+                    self.inject = chunk_cmd
+                    self._logger.info(f"Got inject: {chunk_cmd}")
                     return
             else:
-                self._printer.send_command(cmd)
+                self._printer.commands(cmd)
 
         if command == "goto_start":
-            cmd = f"G94 G90 G0 X{self.start_x} Z{self.start_z} A{self.start_A}"
-            self._printer.send_command(cmd)
+            if self.running:
+                return
+            x,z,a = self.start_coords["x"], self.start_coords["z"], self.start_coords["a"]
+            cmd = f"G94 G90 G0 X{x} Z{z} A{a}"
+            self._printer.commands(cmd)
+            return
             
 
 

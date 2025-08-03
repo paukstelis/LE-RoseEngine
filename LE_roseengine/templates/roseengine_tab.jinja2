@@ -41,5 +41,18 @@
     <div id="roseengine_actions" style="clear: both; margin-top: 20px;">
         <button id="start_job_button" class="btn btn-primary" data-bind="click: startjob">Start</button>
         <button id="stop_job_button" class="btn btn-primary" data-bind="click: stopjob">Stop</button>
+        <button id="gotostart_button" class="btn btn-primary" data-bind="click: gotostart">Reset</button>
+        <button id="control-zdown" class="btn box" style="border: 1px solid; width: 40px; height: 40px;" data-bind="click: function() {jog('down')}">
+            <i class="fa fa-arrow-up"></i>
+        </button>
+        <button id="control-zup" class="btn box" style="border: 1px solid; width: 40px; height: 40px;" data-bind="click: function() {jog('up')}">
+            <i class="fa fa-arrow-down"></i>
+        </button>
+        <button id="control-xdown" class="btn box" style="border: 1px solid; width: 40px; height: 40px;" data-bind="click: function() {jog('left')}">
+            <i class="fa fa-arrow-left"></i>
+        </button>
+        <button id="control-xup" class="btn box" style="border: 1px solid; width: 40px; height: 40px;" data-bind="click: function() {jog('right')}">
+            <i class="fa fa-arrow-right"></i>
+        </button>
     </div>
 </div>
