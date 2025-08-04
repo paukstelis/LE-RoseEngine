@@ -13,9 +13,13 @@ $(function() {
         self.radii_pump = [];
         self.angles_pump = [];
         self.rpm = ko.observable(2);
-        self.amp = ko.observable(1);
+        self.r_amp = ko.observable(1);
+        self.p_amp = ko.observable(1);
         self.start_coord = [0,0,0];
         self.forward = ko.observable(true);
+        self.a_inc = ko.observable(0.5);
+        self.bf_threshold = ko.observable(80);
+        self.chunk = ko.observable(5);
 
         tab = document.getElementById("tab_plugin_roseengine_link");
         tab.innerHTML = tab.innerHTML.replaceAll("Roseengine Plugin", "Rose Engine");
@@ -219,7 +223,8 @@ $(function() {
 
             var data = {
                 rpm: self.rpm(),
-                amp: self.amp(),
+                r_amp: self.r_amp(),
+                p_amp: self.p_amp(),
                 forward: self.forward(),
             };
 

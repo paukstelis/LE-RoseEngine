@@ -49,7 +49,7 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
         self.chunk = 10
         self.buffer = 0
         self.buffer_received = True
-        self.modifiers = {"amp": 1, "phase": 0, "forward": True}
+        #self.modifiers = {"amp": 1, "phase": 0, "forward": True}
 
         self.jobThread = None
         self.buffer = None
@@ -59,22 +59,27 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
 
         self.rpm = 0
         self.phase = 0
-        self.amp = 1
+        self.r_amp = 1.0
+        self.p_amp = 1.0
         self.forward = True
 
     def initialize(self):
         self.datafolder = self.get_plugin_data_folder()
         self._event_bus.subscribe("LATHEENGRAVER_SEND_POSITION", self.get_position)
         #self._event_bus.unsubscribe...
+        self.a_inc = float(self._settings.get(["a_inc"]))
+        self.chunk  = int(self._settings.get(["chunk"]))
+        self.bf_target = int(self._settings.get(["bf_threshold"]))
+        self.ms_threshold = int(self._settings.get(["ms_threshold"]))
 
     def get_settings_defaults(self):
         return dict(
-            increment=0.5,
-            smooth_points=12,
-            tool_length=135,
-            default_segments=1,
-            chunks=5,
+            a_inc=0.5,
+            chunk=5,
+            bf_threshold=80,
+            ms_threshold=10,
             )
+    
     def on_settings_save(self, data):
         octoprint.plugin.SettingsPlugin.on_settings_save(self, data)
         self.initialize()
@@ -211,15 +216,15 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
 
     def _job_thread(self):  
         self._logger.info("Starting job thread")
-        bf_target = 80
+        bf_target = self.bf_target
         dir = "" if self.forward else "-"
+        #this reverses direction, but would also have to reverse list to truly be in reverse
         
         while self.running:
             #A-axis reset
             cmdlist = []
             cmdlist.append("G92 A0")
             self.buffer = 0
-            bf_target = 60 #should be able to calculate this value based on rpm and 0.5sec report time
             tms = round(time.time() * 1000)
             self.feedcontrol["current"] = tms
             degrees_sec = (self.rpm * 360) / 60
@@ -240,7 +245,7 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
                     self.inject = None
                 # Loop until we are ready to send the next chunk
                 tms = round(time.time() * 1000)
-                while self.feedcontrol["next"] - tms > 10 or self.buffer < bf_target:
+                while self.feedcontrol["next"] - tms > self.ms_threshold or self.buffer < bf_target:
                         tms = round(time.time() * 1000)
                         if not self.running:
                             break
@@ -262,10 +267,10 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
         if self.running:
             return
         if self.rock_work:
-            self.rock_work = self.create_working_path(self.rock_main, self.amp)
+            self.rock_work = self.create_working_path(self.rock_main, self.r_amp)
             self._logger.info(f"Rock work list: {self.rock_work}")
         if self.pump_work:
-            self.pump_work = self.create_working_path(self.pump_main, self.pump_amp)
+            self.pump_work = self.create_working_path(self.pump_main, self.p_amp)
             self._logger.info(f"Pump work list: {self.rock_work}")
         self.working = list(zip_longest(self.rock_work, self.pump_work, fillvalue=0))
         self._logger.info(f"Working list: {self.working}")
@@ -321,7 +326,8 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
         
         if command == "start_job":
             self.rpm = float(data["rpm"])
-            self.amp = float(data["amp"])
+            self.r_amp = float(data["r_amp"])
+            self.p_amp = float(data["p_amp"])
             self.forward = bool(data["forward"])
             self._logger.info("ready to start job")
             self._start_job()
