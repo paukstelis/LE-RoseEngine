@@ -1,15 +1,15 @@
 <!--roseengine_tab.jinja2 -->
 
-<div id="roseengine_plugin_main" class="row-fluid">
+<div id="roseengine_plugin_main" class="container-fluid">
 
-    <div id="roseengine_inputs">
+    <div id="roseengine_inputs" class="row-fluid" style="width:100%;">
 
-        <div id="plotarea" style="width: 100%; height: 500px;"></div>
-
-        <div style="width: 300px; float: left;">
+        <div id="rockarea" class="span6" style="height: 300px;"></div>
+        <div id="pumparea" class="span6" style="height: 300px;"></div>
+        <div id="rockstuff" class="span6">
             <div>
                 <label for="rock_file_select">Select Rock Rosette:
-                    <select id="rosette_file_select">
+                    <select id="rock_file_select">
                         <option value="">Loading...</option>
                     </select>
                 </label>        
@@ -34,6 +34,15 @@
                     Amplitude scale factor:
                     <input id="amp" type="number" value="0.5" max="5.0" step="any" data-bind="value: amp">
                 </label>
+            </div>
+        </div>
+        <div id="pumpstuff" class="span6">
+             <div>
+                <label for="pump_file_select">Select Pump Rosette:
+                    <select id="pump_file_select">
+                        <option value="">Loading...</option>
+                    </select>
+                </label>        
             </div>
         </div>
     </div>

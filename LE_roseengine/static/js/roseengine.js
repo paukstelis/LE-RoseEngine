@@ -12,7 +12,7 @@ $(function() {
         self.angles_rock = [];
         self.radii_pump = [];
         self.angles_pump = [];
-        self.rpm = ko.observable(3);
+        self.rpm = ko.observable(2);
         self.amp = ko.observable(1);
         self.start_coord = [0,0,0];
         self.forward = ko.observable(true);
@@ -32,7 +32,9 @@ $(function() {
                     console.log(rosettes);
                     rosettes.sort((a,b) => { return a.name.localeCompare(b.name) });
                     self.rosettes = rosettes;
-                    populateFileSelector(rosettes, "#rosette_file_select", "machinecode");
+                    populateFileSelector(rosettes, "#rock_file_select", "machinecode");
+                    populateFileSelector(rosettes, "#pump_file_select", "machinecode");
+
                 })
                 .fail(function() {
                     console.error("Failed to fetch svg files.");
@@ -69,7 +71,7 @@ $(function() {
             self.name = $("#rock_file_select option:selected").attr("value");
             if (!filePath) return;
 
-            self.load_rosette(filePath);
+            self.load_rosette(filePath,"rock");
             
         });
 
@@ -78,27 +80,51 @@ $(function() {
             self.name = $("#pump_file_select option:selected").attr("value");
             if (!filePath) return;
 
-            self.load_rosette(filePath);
+            self.load_rosette(filePath,"pump");
             
         });
 
-        self.createPolarPlot  = function() {
+        self.createPolarPlot  = function(type,rosette_info) {
+            var radii = null;
+            var theta = null;
+            var color = null;
+            var area = null;
+            console.log(rosette_info);
+            var maxrad = rosette_info.max.toFixed(2);
+            var minrad = rosette_info.min.toFixed(2);
+
+            if (type === "rock") {
+                radii = self.radii_rock;
+                theta = self.theta_rock;
+                color = 'blue';
+                area = 'rockarea';
+            }
+            
+            if (type === "pump") {
+                radii = self.radii_pump;
+                theta = self.theta_pump;
+                color = 'green';
+                area = 'pumparea';
+            }
+            
             var trace = {
-                r: self.radii_rock,
-                theta: self.angles_rock,
+                r: radii,
+                theta: theta,
                 mode: 'lines',
-                name: 'Scan Profile',
+                name: 'Rosette',
                 type: 'scatterpolar',
                 line: {
-                    color: 'blue',
+                    color: color,
                     width: 2
-                }
+                },
 
             };
 
             var layout = {
-                title: 'Rosette',
+                autosize: true,
+                title: 'Max.Rad='+maxrad+'<br>'+type,
                 polar: {
+
                     radialaxis: {
                       visible: false,
                       autorange: true,
@@ -111,19 +137,34 @@ $(function() {
                       rotation: 180,
                       direction: "clockwise"
                     }
-                }
+                },
+
             };
 
             //Make a plot
-            Plotly.newPlot('plotarea',[trace], layout);
+            Plotly.newPlot(area,[trace], layout);
 
         };
 
         self.onDataUpdaterPluginMessage = function(plugin, data) {
-            if (plugin == 'roseengine' && data.type == 'graph') {
+            if (plugin == 'roseengine' && data.type == 'rock') {
                 self.radii_rock = data.radii;
                 self.angles_rock = data.angles;
-                this.createPolarPlot();
+                var rosette_info = {
+                    max: data.maxrad,
+                    min: data.minrad,
+                };
+                this.createPolarPlot(data.type, rosette_info);
+            }
+
+            if (plugin == 'roseengine' && data.type == 'pump') {
+                self.radii_pump = data.radii;
+                self.angles_pump = data.angles;
+                var rosette_info = {
+                    max: data.maxrad,
+                    min: data.minrad,
+                };
+                this.createPolarPlot(data.type, rosette_info);
             }
         };
 
@@ -158,10 +199,10 @@ $(function() {
 
         };
 
-        self.load_rosette = function(filePath) {
+        self.load_rosette = function(filePath, type) {
             var data = {
                 filepath: filePath,
-                type: "rock"
+                type: type
             };
 
             OctoPrint.simpleApiCommand("roseengine", "load_rosette", data)

@@ -24,6 +24,7 @@ import logging
 import numpy as np
 import math
 from svgelements import *
+from itertools import zip_longest
 class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
     octoprint.plugin.AssetPlugin,
     octoprint.plugin.StartupPlugin,
@@ -43,6 +44,7 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
         self.pump_main = {}
         self.rock_work = []
         self.pump_work = []
+        self.working = []
         self.last_position = None
         self.chunk = 10
         self.buffer = 0
@@ -113,9 +115,7 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
         #self._logger.info(f"buffer from payload {self.buffer}")
         self.buffer_received = True
     
-    def create_working_path(self, rosette):
-        phase = self.phase
-        amp = self.amp
+    def create_working_path(self, rosette, amp):
         self._logger.info(rosette["radii"][0])
         rl = rosette["radii"]
         radii = np.array(rl)
@@ -219,6 +219,7 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
             cmdlist = []
             cmdlist.append("G92 A0")
             self.buffer = 0
+            bf_target = 60 #should be able to calculate this value based on rpm and 0.5sec report time
             tms = round(time.time() * 1000)
             self.feedcontrol["current"] = tms
             degrees_sec = (self.rpm * 360) / 60
@@ -226,12 +227,13 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
             next_interval = int(degrees_chunk / degrees_sec * 1000)  # in milliseconds
             self.feedcontrol["next"] = self.feedcontrol["current"] + next_interval
 
-            for i in range(0, len(self.rock_work), self.chunk):
+            for i in range(0, len(self.working), self.chunk):
                 feed = (360/self.a_inc) * self.rpm
-                cmdchunk = self.rock_work[i:i+self.chunk]
+                cmdchunk = self.working[i:i+self.chunk]
                 #self.buffer = 0
                 for cmd in cmdchunk:
-                    cmdlist.append(f"G93 G91 G1 A{dir}{self.a_inc} Z{cmd:0.4f} F{feed:0.1f}")
+                    #can add variable conditional if  we want to swap X and Z
+                    cmdlist.append(f"G93 G91 G1 A{dir}{self.a_inc} X{cmd[1]:0.3f} Z{cmd[0]:0.3f} F{feed:0.1f}")
                 #self._logger.info(cmdlist)
                 if self.inject:
                     cmdlist[-1] = self._update_injection(cmdlist[-1], self.inject)
@@ -259,13 +261,19 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
     def _start_job(self):
         if self.running:
             return
-        self.rock_work = self.create_working_path(self.rock_main)
-        self._logger.info(f"Rock work list: {self.rock_work}")
+        if self.rock_work:
+            self.rock_work = self.create_working_path(self.rock_main, self.amp)
+            self._logger.info(f"Rock work list: {self.rock_work}")
+        if self.pump_work:
+            self.pump_work = self.create_working_path(self.pump_main, self.pump_amp)
+            self._logger.info(f"Pump work list: {self.rock_work}")
+        self.working = list(zip_longest(self.rock_work, self.pump_work, fillvalue=0))
+        self._logger.info(f"Working list: {self.working}")
         self.start_coords["x"] = self.current_x
         self.start_coords["z"] = self.current_z
-        self.start_coords["a"] = self.current_a
+        self.start_coords["a"] = 0.0
         self.running = True
-        self._logger.info(self.start_coords)
+        #self._logger.info(self.start_coords)
         self.jobThread = threading.Thread(target=self._job_thread).start()
 
     def _stop_job(self):
@@ -296,17 +304,19 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
             rosette = self.load_rosette(filePath)
             if type == "rock":
                 self.rock_main = rosette
-                #self.rock_work = rosette["radii"].tolist()
-                #self._logger.info(f"Loaded rock rosette: {self.rock_main}")
                 r = list(self.rock_main["radii"])
                 a = list(self.rock_main["angles"])
-                data = dict(type="graph", radii=r, angles=a)
-                self._plugin_manager.send_plugin_message('roseengine', data)
+                data = dict(type="rock", radii=r, angles=a, maxrad=self.rock_main["max_radius"], minrad=self.rock_main["min_radius"])
                 
             elif type == "pump":
                 self.pump_main = rosette
-                #self.pump_work = rosette["radii"].tolist()
+                r = list(self.pump_main["radii"])
+                a = list(self.pump_main["angles"])
+                data = dict(type="pump", radii=r, angles=a, maxrad=self.pump_main["max_radius"], minrad=self.pump_main["min_radius"])
                 self._logger.info(f"Loaded pump rosette: {self.pump_main}")
+            
+            self._logger.info(data)
+            self._plugin_manager.send_plugin_message('roseengine', data)
             return
         
         if command == "start_job":
