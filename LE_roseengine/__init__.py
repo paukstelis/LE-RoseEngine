@@ -266,10 +266,10 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
     def _start_job(self):
         if self.running:
             return
-        if self.rock_work:
+        if self.rock_main:
             self.rock_work = self.create_working_path(self.rock_main, self.r_amp)
             self._logger.info(f"Rock work list: {self.rock_work}")
-        if self.pump_work:
+        if self.pump_main:
             self.pump_work = self.create_working_path(self.pump_main, self.p_amp)
             self._logger.info(f"Pump work list: {self.rock_work}")
         self.working = list(zip_longest(self.rock_work, self.pump_work, fillvalue=0))
@@ -318,7 +318,7 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
                 r = list(self.pump_main["radii"])
                 a = list(self.pump_main["angles"])
                 data = dict(type="pump", radii=r, angles=a, maxrad=self.pump_main["max_radius"], minrad=self.pump_main["min_radius"])
-                self._logger.info(f"Loaded pump rosette: {self.pump_main}")
+                #self._logger.info(f"Loaded pump rosette: {self.pump_main}")
             
             self._logger.info(data)
             self._plugin_manager.send_plugin_message('roseengine', data)
