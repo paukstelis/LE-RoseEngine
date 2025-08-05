@@ -19,7 +19,7 @@ import sys
 import os
 import time
 import subprocess
-import threading
+import asyncio
 import logging
 import numpy as np
 import math
@@ -60,7 +60,9 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
 
         self.rpm = 0.0
         self.updated_rpm = 0.0
-        self.rpm_lock = threading.Lock()
+        self.rpm_lock = asyncio.Lock()
+        self.job_task = None
+        self.stop_event = asyncio.Event()
         self.phase = 0
         self.r_amp = 1.0
         self.p_amp = 1.0
@@ -212,8 +214,9 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
         #self._logger.info(rosette)
         return rosette
 
-    def _job_thread(self):  
-        self._logger.info("Starting job thread")
+    async def _job_task(self):  
+        self._logger.info("Starting job task")
+        await asyncio.sleep(0.1)
         try:
             bf_target = self.bf_target
             dir = "" if self.forward else "-"
@@ -257,7 +260,7 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
                     # Loop until we are ready to send the next chunk
                     tms = round(time.time() * 1000)
                     while self.feedcontrol["next"] - tms > self.ms_threshold or self.buffer < bf_target:
-                            tms = round(time.time() * 1000)
+                            await asyncio.sleep(0.01)
                             if not self.running:
                                 break
 
@@ -292,12 +295,14 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
         self.start_coords["a"] = 0.0
         self.running = True
         #self._logger.info(self.start_coords)
-        self.jobThread = threading.Thread(target=self._job_thread).start()
+        self.stop_event.clear()
+        self.job_task = asyncio.create_task(self._job_task())
 
     def _stop_job(self):
         if not self.running:
             return
         self.running = False
+        self.stop_event.set()
 
     def is_api_protected(self):
         return True
