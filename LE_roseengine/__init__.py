@@ -56,8 +56,11 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
         self.feedcontrol =  {"current": 0, "next": 0}
         self.start_coords = {"x": None, "z": None, "a": None}
         self.ms_threshold = 100
+        self.bf_target = 60
 
-        self.rpm = 0
+        self.rpm = 0.0
+        self.updated_rpm = 0.0
+        self.rpm_lock = threading.Lock()
         self.phase = 0
         self.r_amp = 1.0
         self.p_amp = 1.0
@@ -67,10 +70,12 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
         self.datafolder = self.get_plugin_data_folder()
         self._event_bus.subscribe("LATHEENGRAVER_SEND_POSITION", self.get_position)
         #self._event_bus.unsubscribe...
+
         self.a_inc = float(self._settings.get(["a_inc"]))
         self.chunk  = int(self._settings.get(["chunk"]))
         self.bf_target = int(self._settings.get(["bf_threshold"]))
         self.ms_threshold = int(self._settings.get(["ms_threshold"]))
+
 
     def get_settings_defaults(self):
         return dict(
@@ -80,19 +85,14 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
             ms_threshold=10,
             )
     
+    def get_template_configs(self):
+        return [
+            dict(type="settings", name="Rose Engine", custom_bindings=False)
+        ]
+    
     def on_settings_save(self, data):
         octoprint.plugin.SettingsPlugin.on_settings_save(self, data)
         self.initialize()
-
-    @property
-    def allowed(self):
-        if self._settings is None:
-            return ""
-        else:
-            return str(self._settings.get(["allowed"]))
-        
-    def get_settings_defaults(self):
-            return ({'allowed': 'png, gif, jpg, txt, stl, svg'})
 
     def get_extension_tree(self, *args, **kwargs):
         return {'model': {'png': ["png", "jpg", "jpeg", "gif", "txt", "stl", "svg"]}}
@@ -103,8 +103,6 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
         # core UI here.
         return {
             "js": ["js/roseengine.js", "js/plotly-latest.min.js"],
-            "css": ["css/roseengine.css"],
-            "less": ["less/roseengine.less"]
         }
     
     def on_event(self, event, payload):
@@ -121,7 +119,7 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
         self.buffer_received = True
     
     def create_working_path(self, rosette, amp):
-        self._logger.info(rosette["radii"][0])
+        #self._logger.info(rosette["radii"][0])
         rl = rosette["radii"]
         radii = np.array(rl)
         #first apply any amplitude modifiers
@@ -216,51 +214,66 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
 
     def _job_thread(self):  
         self._logger.info("Starting job thread")
-        bf_target = self.bf_target
-        dir = "" if self.forward else "-"
-        #this reverses direction, but would also have to reverse list to truly be in reverse
-        
-        while self.running:
-            #A-axis reset
-            cmdlist = []
-            cmdlist.append("G92 A0")
-            self.buffer = 0
-            tms = round(time.time() * 1000)
-            self.feedcontrol["current"] = tms
+        try:
+            bf_target = self.bf_target
+            dir = "" if self.forward else "-"
+            #this reverses direction, but would also have to reverse list to truly be in reverse
             degrees_sec = (self.rpm * 360) / 60
             degrees_chunk = self.chunk * self.a_inc
-            next_interval = int(degrees_chunk / degrees_sec * 1000)  # in milliseconds
-            self.feedcontrol["next"] = self.feedcontrol["current"] + next_interval
-
-            for i in range(0, len(self.working), self.chunk):
-                feed = (360/self.a_inc) * self.rpm
-                cmdchunk = self.working[i:i+self.chunk]
-                #self.buffer = 0
-                for cmd in cmdchunk:
-                    #can add variable conditional if  we want to swap X and Z
-                    cmdlist.append(f"G93 G91 G1 A{dir}{self.a_inc} X{cmd[1]:0.3f} Z{cmd[0]:0.3f} F{feed:0.1f}")
-                #self._logger.info(cmdlist)
-                if self.inject:
-                    cmdlist[-1] = self._update_injection(cmdlist[-1], self.inject)
-                    self.inject = None
-                # Loop until we are ready to send the next chunk
-                tms = round(time.time() * 1000)
-                while self.feedcontrol["next"] - tms > self.ms_threshold or self.buffer < bf_target:
-                        tms = round(time.time() * 1000)
-                        if not self.running:
-                            break
-
-                self._logger.info(f"buffer is now at {self.buffer}")
-                self._printer.commands(cmdlist)
-                self.buffer_received = False
-                degrees_sec = (self.rpm * 360) / 60
-                next_interval = int(degrees_chunk / degrees_sec * 1000)
-                self.feedcontrol["current"] = round(time.time() * 1000)
-                self.feedcontrol["next"] = self.feedcontrol["current"] + next_interval
+            
+            while self.running:
+                #A-axis reset
                 cmdlist = []
-                self.last_position = i
-                if not self.running:
-                    break
+                cmdlist.append("G92 A0")
+                self.buffer = 0
+                tms = round(time.time() * 1000)
+                self.feedcontrol["current"] = tms
+                degrees_sec = (self.rpm * 360) / 60
+                degrees_chunk = self.chunk * self.a_inc
+                next_interval = int(degrees_chunk / degrees_sec * 1000)  # in milliseconds
+                self.feedcontrol["next"] = self.feedcontrol["current"] + next_interval
+                self._logger.info(f"Next interval at {self.rpm} RPM, {next_interval}, bf_target {bf_target}")
+
+                for i in range(0, len(self.working), self.chunk):
+              
+                    with self.rpm_lock:
+                        if self.updated_rpm > 0:
+                            self._logger.info("Updating RPM")
+                            self.rpm = self.updated_rpm
+                            self.updated_rpm = 0.0
+                            degrees_sec = (self.rpm * 360) / 60
+                            next_interval = int(degrees_chunk / degrees_sec * 1000)  
+
+                    feed = (360/self.a_inc) * self.rpm
+                    cmdchunk = self.working[i:i+self.chunk]
+                    #self.buffer = 0
+                    for cmd in cmdchunk:
+                        #can add variable conditional if  we want to swap X and Z
+                        cmdlist.append(f"G93 G91 G1 A{dir}{self.a_inc} X{cmd[1]:0.3f} Z{cmd[0]:0.3f} F{feed:0.1f}")
+                    #self._logger.info(cmdlist)
+                    if self.inject:
+                        cmdlist[-1] = self._update_injection(cmdlist[-1], self.inject)
+                        self.inject = None
+                    # Loop until we are ready to send the next chunk
+                    tms = round(time.time() * 1000)
+                    while self.feedcontrol["next"] - tms > self.ms_threshold or self.buffer < bf_target:
+                            tms = round(time.time() * 1000)
+                            if not self.running:
+                                break
+
+                    self._logger.info(f"buffer is now at {self.buffer}")
+                    self._printer.commands(cmdlist)
+                    self.buffer_received = False
+                    degrees_sec = (self.rpm * 360) / 60
+                    next_interval = int(degrees_chunk / degrees_sec * 1000)
+                    self.feedcontrol["current"] = round(time.time() * 1000)
+                    self.feedcontrol["next"] = self.feedcontrol["current"] + next_interval
+                    cmdlist = []
+                    self.last_position = i
+                    if not self.running:
+                        break
+        except Exception as e:
+            self._logger.error(f"Exception in job thread: {e}", exc_info=True)
         self._logger.info("Thread ended")
 
     def _start_job(self):
@@ -268,12 +281,12 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
             return
         if self.rock_main:
             self.rock_work = self.create_working_path(self.rock_main, self.r_amp)
-            self._logger.info(f"Rock work list: {self.rock_work}")
+            #self._logger.info(f"Rock work list: {self.rock_work}")
         if self.pump_main:
             self.pump_work = self.create_working_path(self.pump_main, self.p_amp)
-            self._logger.info(f"Pump work list: {self.rock_work}")
+            #self._logger.info(f"Pump work list: {self.rock_work}")
         self.working = list(zip_longest(self.rock_work, self.pump_work, fillvalue=0))
-        self._logger.info(f"Working list: {self.working}")
+        #self._logger.info(f"Working list: {self.working}")
         self.start_coords["x"] = self.current_x
         self.start_coords["z"] = self.current_z
         self.start_coords["a"] = 0.0
@@ -296,7 +309,9 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
             jog=[],
             load_rosette=[],
             get_arc_length=[],
-            goto_start=[]
+            goto_start=[],
+            clear=[],
+            update_rpm=[]
         )
     
     def on_api_command(self, command, data):
@@ -320,7 +335,7 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
                 data = dict(type="pump", radii=r, angles=a, maxrad=self.pump_main["max_radius"], minrad=self.pump_main["min_radius"])
                 #self._logger.info(f"Loaded pump rosette: {self.pump_main}")
             
-            self._logger.info(data)
+            #self._logger.info(data)
             self._plugin_manager.send_plugin_message('roseengine', data)
             return
         
@@ -357,7 +372,7 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
             if self.running:
                 if not self.inject:
                     self.inject = chunk_cmd
-                    self._logger.info(f"Got inject: {chunk_cmd}")
+                    #self._logger.info(f"Got inject: {chunk_cmd}")
                     return
             else:
                 self._printer.commands(cmd)
@@ -369,10 +384,36 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
             cmd = f"G94 G90 G0 X{x} Z{z} A{a}"
             self._printer.commands(cmd)
             return
+        
+        if command == "clear":
+            if self.running:
+                msg = {"title": "Stop First", "text": "You must stop the running job before clearing a rosette."}
+                self.send_le_error(msg)
+                return
+            if data["type"] == "rock":
+                self.rock_main = []
+                self.rock_work = []
+            if data["type"] == "pump":
+                self.pump_main = []
+                self.pump_work = []
+
+        if command == "update_rpm":
+            with self.rpm_lock:
+                self.updated_rpm = float(data["rpm"])
             
+            
+    def send_le_error(self, data):
+        
+        payload = dict(
+            type="simple_notify",
+            title=data["title"],
+            text=data["text"],
+            hide=True,
+            delay=10000,
+            notify_type="error"
+        )
 
-
-
+        self._plugin_manager.send_plugin_message("latheengraver", payload)
 
     ##~~ Softwareupdate hook
 

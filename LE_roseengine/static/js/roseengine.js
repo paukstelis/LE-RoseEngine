@@ -7,7 +7,7 @@
 $(function() {
     function RoseengineViewModel(parameters) {
         var self = this;
-        self.global_settings = parameters[1];
+        self.global_settings = parameters[0];
         self.radii_rock = [];
         self.angles_rock = [];
         self.radii_pump = [];
@@ -17,9 +17,16 @@ $(function() {
         self.p_amp = ko.observable(1);
         self.start_coord = [0,0,0];
         self.forward = ko.observable(true);
+        
         self.a_inc = ko.observable(0.5);
         self.bf_threshold = ko.observable(80);
+        self.ms_threshold = ko.observable(10);
         self.chunk = ko.observable(5);
+
+        self.pump_offset = ko.observable(0.0);
+        self.rock_offset = ko.observable(0);
+
+        self.phase_offset = ko.observable(0);
 
         tab = document.getElementById("tab_plugin_roseengine_link");
         tab.innerHTML = tab.innerHTML.replaceAll("Roseengine Plugin", "Rose Engine");
@@ -62,11 +69,15 @@ $(function() {
 
         self.onBeforeBinding = function () {
             self.settings = self.global_settings.settings.plugins.roseengine;
-            //console.log(self.global_settings);
+            console.log(self.settings);
             self.fetchProfileFiles();
-            self.smooth_points = self.settings.smooth_points;
-            self.tool_length = self.settings.tool_length;
-            self.increment = self.settings.increment;
+            self.a_inc = self.settings.a_inc();
+            console.log("binding self.a_inc")
+            console.log(self.a_inc);
+            var po = $('#po_span');
+            var po_slider = $('#pump_offset');
+            po_slider.attr("step", self.a_inc);
+            
 
         };
 
@@ -86,6 +97,12 @@ $(function() {
 
             self.load_rosette(filePath,"pump");
             
+        });
+
+        $("#rpm").on("change", function() {
+
+            self.update_rpm();
+
         });
 
         self.createPolarPlot  = function(type,rosette_info) {
@@ -126,7 +143,12 @@ $(function() {
 
             var layout = {
                 autosize: true,
-                title: 'Max.Rad='+maxrad+'<br>'+type,
+                title: {
+                    text: 'r max='+maxrad+'<br>'+'r min='+minrad+'<br>'+type,
+                    font: {
+                        size: 12
+                    },
+                },
                 polar: {
 
                     radialaxis: {
@@ -219,6 +241,24 @@ $(function() {
 
         };
 
+        self.clear_rosette = function(type) {
+            
+            var data = {
+                type: type,
+            };
+
+            OctoPrint.simpleApiCommand("roseengine", "clear", data)
+                .done(function(response) {
+                    console.log("File info transmitted");
+                    var toclear = '#'+type+'area';
+                    $(toclear).empty();
+                })
+                .fail(function() {
+                    console.error("File info not transmitted");
+                });
+
+        };
+
         self.startjob = function() {
 
             var data = {
@@ -270,17 +310,27 @@ $(function() {
 
         };
 
+        self.update_rpm = function()  {
+            var data = {
+                rpm: self.rpm()
+            };
+
+            OctoPrint.simpleApiCommand("roseengine", "update_rpm", data)
+                .done(function(response) {
+                    console.log("GCode written successfully.");
+                })
+                .fail(function() {
+                    console.error("Failed to write GCode.");
+                });
+
+
+        };
+
     }
 
-    /* view model class, parameters for constructor, container to bind to
-     * Please see http://docs.octoprint.org/en/master/plugins/viewmodels.html#registering-custom-viewmodels for more details
-     * and a full list of the available options.
-     */
     OCTOPRINT_VIEWMODELS.push({
         construct: RoseengineViewModel,
-        // ViewModels your plugin depends on, e.g. loginStateViewModel, settingsViewModel, ...
-        dependencies: ["filesViewModel", "settingsViewModel", "accessViewModel","loginStateViewModel"],
-        // Elements to bind to, e.g. #settings_plugin_roseengine, #tab_plugin_roseengine, ...
+        dependencies: ["settingsViewModel", "filesViewModel",  "accessViewModel","loginStateViewModel"],
         elements: [ "#tab_plugin_roseengine","#settings_plugin_roseengine" ]
     });
 });

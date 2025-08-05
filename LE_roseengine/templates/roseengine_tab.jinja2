@@ -2,66 +2,90 @@
 
 <div id="roseengine_plugin_main" class="container-fluid">
 
-    <div id="roseengine_inputs" class="row-fluid" style="width:100%;">
-
-        <div id="rockarea" class="span6" style="height: 300px;"></div>
-        <div id="pumparea" class="span6" style="height: 300px;"></div>
-        <div id="rockstuff" class="span6">
-            <div>
-                <label for="rock_file_select">Select Rock Rosette:
-                    <select id="rock_file_select">
-                        <option value="">Loading...</option>
-                    </select>
-                </label>        
-            </div>
-
-            <div>
-                <label title="RPM" data-toggle="tooltip" for="rpm">
-                    RPM:
-                    <input id="rpm" type="number" value="1" step="any" data-bind="value: rpm">
-                </label>
-            </div>
-            
-            <div>
-                <label title="forward" data-toggle="tooltip" for="forward">
-                    Spindle forward:
-                    <input id="forward" type="checkbox" checked data-bind="checked: forward">
-                </label>
-            </div>
-
-            <div>
-                <label title="The percent step over at the largest diameter of the piece based on the input tool diameter." data-toggle="tooltip" for="amp">
-                    Amplitude scale factor:
-                    <input id="amp" type="number" value="0.5" max="5.0" step="any" data-bind="value: amp">
-                </label>
+    <div class="row-fluid">
+        <!-- Rock Column -->
+        <div class="span6">
+            <div id="rockarea" style="height: 300px;"></div>
+            <div id="rock_controls" class="mt-3">
+                <div>
+                    <label for="rock_file_select">Select Rock Rosette:</label> 
+                        <select id="rock_file_select">
+                            <option value="">Loading...</option>
+                        </select>    
+                </div>
+                <div>
+                    <label for="r_amp">Rock amplitude:</label>
+                    <input id="r_amp" type="number" value="0.5" max="5.0" step="any" data-bind="value: r_amp">            
+                </div>
+                <div>
+                    <button id="clear_rock" class="btn" data-bind="click: function() {clear_rosette('rock')}"> Clear</button>
+                </div>
             </div>
         </div>
-        <div id="pumpstuff" class="span6">
-             <div>
-                <label for="pump_file_select">Select Pump Rosette:
-                    <select id="pump_file_select">
-                        <option value="">Loading...</option>
-                    </select>
-                </label>        
+        <!-- Pump Column -->
+        <div class="span6">
+            <div id="pumparea" style="height: 300px;"></div>
+            <div id="pump_controls" class="mt-3">
+                <div>
+                    <label for="pump_file_select">Select Pump Rosette:</label> 
+                        <select id="pump_file_select">
+                            <option value="">Loading...</option>
+                        </select>
+                           
+                </div>
+                <div>
+                    <label for="p_amp">Pump amplitude:</label>
+                    <input id="p_amp" type="number" value="0.5" max="5.0" step="any" data-bind="value: p_amp">            
+                </div>
+                <div>
+                    <label title="Phase offset, must be in internvals of angle increments" data-toggle="tooltip" for="pump_offset">Phase offset</label>
+                    <p><strong data-bind="text: pump_offset()"></strong></p>
+                    <input class="slider" id="pump_offset" type="range" min="0.0" max="360.0" step="0.5" data-bind="value: pump_offset, valueUpdate: 'input'">
+                </div>
+                <div>
+                    <button id="clear_rock" class="btn" data-bind="click: function() {clear_rosette('pump')}"> Clear</button>
+                </div>
+                <!-- Add more pump-specific controls here if needed -->
             </div>
         </div>
     </div>
-<br>
-    <div id="roseengine_actions" style="clear: both; margin-top: 20px;">
-        <button id="start_job_button" class="btn btn-primary" data-bind="click: startjob">Start</button>
-        <button id="stop_job_button" class="btn btn-primary" data-bind="click: stopjob">Stop</button>
-        <button id="gotostart_button" class="btn btn-primary" data-bind="click: gotostart">Reset</button>
-        <button id="control-zdown" class="btn box" style="border: 1px solid; width: 40px; height: 40px;" data-bind="click: function() {jog('down')}">
-            <i class="fa fa-arrow-up"></i>
-        </button>
-        <button id="control-zup" class="btn box" style="border: 1px solid; width: 40px; height: 40px;" data-bind="click: function() {jog('up')}">
-            <i class="fa fa-arrow-down"></i>
-        </button>
-        <button id="control-xdown" class="btn box" style="border: 1px solid; width: 40px; height: 40px;" data-bind="click: function() {jog('left')}">
-            <i class="fa fa-arrow-left"></i>
-        </button>
-        <button id="control-xup" class="btn box" style="border: 1px solid; width: 40px; height: 40px;" data-bind="click: function() {jog('right')}">
-            <i class="fa fa-arrow-right"></i>
-        </button>
+    <!-- Input Region (spans both columns) -->
+    <div id="input_region" class="row mt-4" >
+    <hr>
+        <div class="col-12">
+                <div style="padding: 0px 10px 10px 10px;">
+                        <center><label title="RPM" data-toggle="tooltip" for="rpm">RPM</label>
+                        <input class="slider" id="rpm" type="range" min="0.25" max="6" step="0.25" data-bind="value: rpm, valueUpdate: 'input'">
+                        <br><strong data-bind="text: rpm()"></strong>
+                        </center>    
+                </div>
+                <div>
+                    <label title="forward" data-toggle="tooltip" for="forward">
+                        Spindle forward:
+                        <input id="forward" type="checkbox" checked data-bind="checked: forward">
+                    </label>
+                </div>
+        </div>
+    </div>
+
+    <!-- Control Region (spans both columns) -->
+    <div id="roseengine_actions" class="row mt-3">
+        <div class="col-12">
+            <button id="start_job_button" class="btn btn-primary" data-bind="click: startjob">Start</button>
+            <button id="stop_job_button" class="btn btn-primary" data-bind="click: stopjob">Stop</button>
+            <button id="gotostart_button" class="btn btn-primary" data-bind="click: gotostart">Reset</button>
+            <button id="control-zdown" class="btn box" style="border: 1px solid; width: 40px; height: 40px;" data-bind="click: function() {jog('down')}">
+                <i class="fa fa-arrow-up"></i>
+            </button>
+            <button id="control-zup" class="btn box" style="border: 1px solid; width: 40px; height: 40px;" data-bind="click: function() {jog('up')}">
+                <i class="fa fa-arrow-down"></i>
+            </button>
+            <button id="control-xdown" class="btn box" style="border: 1px solid; width: 40px; height: 40px;" data-bind="click: function() {jog('left')}">
+                <i class="fa fa-arrow-left"></i>
+            </button>
+            <button id="control-xup" class="btn box" style="border: 1px solid; width: 40px; height: 40px;" data-bind="click: function() {jog('right')}">
+                <i class="fa fa-arrow-right"></i>
+            </button>
+        </div>
     </div>
 </div>

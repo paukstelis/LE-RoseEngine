@@ -1,21 +1,21 @@
 <form class="form-horizontal">
     <div class="control-group">
         <label>
-            <input type="number" step="any" max="60.0" class="input-mini" data-bind="value:a_inc"> Rotation angle increment
+            <input type="number" step="any" min="0.1" max="60.0" class="input-mini" data-bind="value: settings.plugins.roseengine.a_inc"> Rotation angle increment
             <i class="icon icon-info-sign" title="" data-toggle="tooltip"></i>
         </label>
         <br>
         <label>
-            <input type="number" step="1" min="1" max="60" class="input-mini" data-bind="value:chunk"> Command chunk size
+            <input type="number" step="1" min="1" max="60" class="input-mini" data-bind="value: settings.plugins.roseengine.chunk"> Command chunk size
             <i class="icon icon-info-sign" title="" data-toggle="tooltip"></i>
         </label>
         <br>
         <label>
-            <input type="number" step="1" min="60" max="95" class="input-mini" data-bind="value:bf_threshold"> Buffer threshold
+            <input type="number" step="1" min="0" max="95" class="input-mini" data-bind="value: settings.plugins.roseengine.bf_threshold"> Buffer threshold
             <i class="icon icon-info-sign" title="" data-toggle="tooltip"></i>
         </label>
         <label>
-            <input type="number" step="1" min="0" max="200" class="input-mini" data-bind="value:ms_threshold"> Millisecond threshold
+            <input type="number" step="1" min="0" max="200" class="input-mini" data-bind="numeric, value: settings.plugins.roseengine.ms_threshold"> Millisecond threshold
             <i class="icon icon-info-sign" title="" data-toggle="tooltip"></i>
         </label>
     </div>
