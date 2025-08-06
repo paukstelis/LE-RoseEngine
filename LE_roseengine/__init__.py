@@ -66,6 +66,9 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
         self.p_amp = 1.0
         self.forward = True
 
+        self.auto_reset = False
+        self.reset_cmds = []
+
     def initialize(self):
         self.datafolder = self.get_plugin_data_folder()
         self._event_bus.subscribe("LATHEENGRAVER_SEND_POSITION", self.get_position)
@@ -75,6 +78,7 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
         self.chunk  = int(self._settings.get(["chunk"]))
         self.bf_target = int(self._settings.get(["bf_threshold"]))
         self.ms_threshold = int(self._settings.get(["ms_threshold"]))
+        self.auto_reset = bool(self._settings.get(["auto_reset"]))
 
 
     def get_settings_defaults(self):
@@ -83,6 +87,7 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
             chunk=5,
             bf_threshold=80,
             ms_threshold=10,
+            auto_reset=False,
             )
     
     def get_template_configs(self):
@@ -115,8 +120,12 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
         self.current_z = payload["z"]
         self.current_a = payload["a"]
         self.buffer = payload["bf"]
-        #self._logger.info(f"buffer from payload {self.buffer}")
+        self._logger.info(payload["state"])
         self.buffer_received = True
+        if len(self.reset_cmds) > 0 and payload["state"]== "Idle":
+            self._printer.commands(self.reset_cmds)
+            self.reset_cmds = []
+        
     
     def create_working_path(self, rosette, amp):
         #self._logger.info(rosette["radii"][0])
@@ -157,16 +166,14 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
         return cmd
 
     def resample_path_to_polar(self, matrix, path: Path, center=(0, 0), points=720):
-        total_length = path.length()
-        step = total_length / points
         cx, cy = center
         centerpoint  = Point(cx, cy)
         angles = []
         radii = []
         #this should all be possible with svgeelements functions, but I don't know how to do it yet
         for i in range(points):
-            pos = i * step
-            pt = path.point(pos / total_length)
+            pos = i/points
+            pt = path.point(pos)
             dx = pt.x - cx
             dy = pt.y - cy
             tp = matrix.transform_point(Point(dx, dy))
@@ -257,6 +264,7 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
                     # Loop until we are ready to send the next chunk
                     tms = round(time.time() * 1000)
                     while self.feedcontrol["next"] - tms > self.ms_threshold or self.buffer < bf_target:
+                            time.sleep(self.ms_threshold/1000)
                             tms = round(time.time() * 1000)
                             if not self.running:
                                 break
@@ -298,6 +306,22 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
         if not self.running:
             return
         self.running = False
+        if self.auto_reset:
+            gcode = []
+            x,z,a = self.start_coords["x"], self.start_coords["z"], self.start_coords["a"]
+            if self.rock_main and not self.pump_main:
+                #assume we are just going to back and then in/out
+                gcode.append(f"G94 G90 G0 X{x}")
+                gcode.append(f"G90 G0 Z{z} A{a}")
+            if self.pump_main and not self.rock_main:
+                gcode.append(f"G94 G90 G0 Z{z}")
+                gcode.append(f"G0 X{x} A{a}")
+            if self.pump_main and self.rock_main:
+                gcode.append(f"G94 G90 G0 Z{z} X{x}")
+                gcode.append(f"G0 A0")
+            #self._printer.commands(gcode)
+            self.reset_cmds = gcode
+
 
     def is_api_protected(self):
         return True
