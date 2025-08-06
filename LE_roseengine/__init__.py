@@ -68,6 +68,11 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
 
         self.auto_reset = False
         self.reset_cmds = []
+        self.state = None
+        self.stopping = False
+
+        self.rock_para = False
+        self.pump_para = False
 
     def initialize(self):
         self.datafolder = self.get_plugin_data_folder()
@@ -112,19 +117,30 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
     
     def on_event(self, event, payload):
         if event == "plugin_latheengraver_send_position":
-            self.get_position(event, payload) 
-    
+            self.get_position(event, payload)
+        if event == "UpdateFiles":
+            #get all file lists
+            data = dict(
+                func="refresh"
+            )
+            self._plugin_manager.send_plugin_message("roseengine", data)
+
     def get_position(self, event, payload):
         #self._logger.info(payload)
         self.current_x = payload["x"]
         self.current_z = payload["z"]
         self.current_a = payload["a"]
         self.buffer = payload["bf"]
-        self._logger.info(payload["state"])
+        self.state = payload["state"]
+        #self._logger.info(payload["state"])
         self.buffer_received = True
-        if len(self.reset_cmds) > 0 and payload["state"]== "Idle":
+        
+        if len(self.reset_cmds) > 0 and self.state == "Idle":
             self._printer.commands(self.reset_cmds)
             self.reset_cmds = []
+
+        if self.state == "Idle" and self.stopping:
+            self.stopping =  False
         
     
     def create_working_path(self, rosette, amp):
@@ -134,10 +150,19 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
         #first apply any amplitude modifiers
         radii = np.array(radii) * amp
         #generate differences
-        newradii = np.diff(radii)
+        newradii = np.roll(radii, -1) - radii
 
         return newradii
     
+    def _parametric_sine(self,num_periods=1, amplitude=1.0, phase_shift=0.0):
+        result = []
+        for deg in range(0, int(360 * num_periods) + 1, self.a_inc):
+            radians = math.radians(deg + phase_shift)
+            displacement = amplitude * math.sin(radians)
+            result.append(displacement)
+        return result
+
+
     def _update_injection(self, cmd: str, axis_val: tuple) -> str:
         axis, delta = axis_val
         # Regex pattern to find axis (e.g., A, Z, etc.)
@@ -166,18 +191,25 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
         return cmd
 
     def resample_path_to_polar(self, matrix, path: Path, center=(0, 0), points=720):
-        cx, cy = center
-        centerpoint  = Point(cx, cy)
+        # Sample points along the path
+        xs = []
+        ys = []
+        for i in range(points):
+            pos = i / points
+            pt = path.point(pos)
+            xs.append(pt.x)
+            ys.append(pt.y)
+        # Calculate center as the average of sampled points
+        cx = sum(xs) / len(xs)
+        cy = sum(ys) / len(ys)
+        centerpoint = Point(cx, cy)
+
         angles = []
         radii = []
-        #this should all be possible with svgeelements functions, but I don't know how to do it yet
         for i in range(points):
-            pos = i/points
-            pt = path.point(pos)
-            dx = pt.x - cx
-            dy = pt.y - cy
-            tp = matrix.transform_point(Point(dx, dy))
-            r = math.hypot(tp[0], tp[1])
+            pt = Point(xs[i], ys[i])
+            dist = centerpoint.distance_to(pt)
+            r = dist / 3.779527559
             theta = i * (360 / points)
             angles.append(theta)
             radii.append(r)
@@ -206,8 +238,8 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
                 np.array(angles)
                 np.array(radii)
         #circularize
-        angles = np.append(angles, angles[0])
-        radii = np.append(radii, radii[0])
+        #angles = np.append(angles, angles[0])
+        #radii = np.append(radii, radii[0])
 
         #get radius info
         max_radius = np.max(radii)
@@ -232,6 +264,7 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
                 #A-axis reset
                 cmdlist = []
                 cmdlist.append("G92 A0")
+                #self._logger.info(f"x:{self.current_x} z:{self.current_z}")
                 self.buffer = 0
                 tms = round(time.time() * 1000)
                 self.feedcontrol["current"] = tms
@@ -239,13 +272,13 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
                 degrees_chunk = self.chunk * self.a_inc
                 next_interval = int(degrees_chunk / degrees_sec * 1000)  # in milliseconds
                 self.feedcontrol["next"] = self.feedcontrol["current"] + next_interval
-                self._logger.info(f"Next interval at {self.rpm} RPM, {next_interval}, bf_target {bf_target}")
+                #self._logger.info(f"Next interval at {self.rpm} RPM, {next_interval}, bf_target {bf_target}")
 
                 for i in range(0, len(self.working), self.chunk):
               
                     with self.rpm_lock:
                         if self.updated_rpm > 0:
-                            self._logger.info("Updating RPM")
+                            #self._logger.info("Updating RPM")
                             self.rpm = self.updated_rpm
                             self.updated_rpm = 0.0
                             degrees_sec = (self.rpm * 360) / 60
@@ -269,7 +302,7 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
                             if not self.running:
                                 break
 
-                    self._logger.info(f"buffer is now at {self.buffer}")
+                    #self._logger.info(f"buffer is now at {self.buffer}")
                     self._printer.commands(cmdlist)
                     self.buffer_received = False
                     degrees_sec = (self.rpm * 360) / 60
@@ -294,18 +327,18 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
             self.pump_work = self.create_working_path(self.pump_main, self.p_amp)
             #self._logger.info(f"Pump work list: {self.rock_work}")
         self.working = list(zip_longest(self.rock_work, self.pump_work, fillvalue=0))
-        #self._logger.info(f"Working list: {self.working}")
         self.start_coords["x"] = self.current_x
         self.start_coords["z"] = self.current_z
         self.start_coords["a"] = 0.0
         self.running = True
-        #self._logger.info(self.start_coords)
+        self._logger.info(self.working)
         self.jobThread = threading.Thread(target=self._job_thread).start()
 
     def _stop_job(self):
         if not self.running:
             return
         self.running = False
+        self.stopping = True
         if self.auto_reset:
             gcode = []
             x,z,a = self.start_coords["x"], self.start_coords["z"], self.start_coords["a"]
@@ -370,10 +403,12 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
             self.forward = bool(data["forward"])
             self._logger.info("ready to start job")
             self._start_job()
+            return
 
         if command == "stop_job":
             self._logger.info("stoping job")
             self._stop_job()
+            return
 
         if command == "jog":
             direction = data["direction"]
@@ -420,10 +455,12 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
             if data["type"] == "pump":
                 self.pump_main = []
                 self.pump_work = []
+            return
 
         if command == "update_rpm":
             with self.rpm_lock:
                 self.updated_rpm = float(data["rpm"])
+            return
             
             
     def send_le_error(self, data):
@@ -438,6 +475,10 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
         )
 
         self._plugin_manager.send_plugin_message("latheengraver", payload)
+
+    def hook_gcode_sending(self, comm_instance, phase, cmd, cmd_type, gcode, *args, **kwargs):
+        if self.stopping and self.state == "Run":
+            return (None, )
 
     ##~~ Softwareupdate hook
 
@@ -480,5 +521,6 @@ def __plugin_load__():
     global __plugin_hooks__
     __plugin_hooks__ = {
         "octoprint.plugin.softwareupdate.check_config": __plugin_implementation__.get_update_information,
-        "octoprint.filemanager.extension_tree": __plugin_implementation__.get_extension_tree
+        "octoprint.filemanager.extension_tree": __plugin_implementation__.get_extension_tree,
+        "octoprint.comm.protocol.gcode.sending": __plugin_implementation__.hook_gcode_sending,
     }

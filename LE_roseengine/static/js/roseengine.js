@@ -192,6 +192,10 @@ $(function() {
                 };
                 this.createPolarPlot(data.type, rosette_info);
             }
+
+            if (plugin == 'roseengine' && data.func == 'refresh') {
+                self.fetchProfileFiles();
+            }
         };
 
         self.send_error_messasge = function(message) {
