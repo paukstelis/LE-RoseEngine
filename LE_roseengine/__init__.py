@@ -85,6 +85,12 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
         self.ms_threshold = int(self._settings.get(["ms_threshold"]))
         self.auto_reset = bool(self._settings.get(["auto_reset"]))
 
+        storage = self._file_manager._storage("local")
+        if storage.folder_exists("rosette"):
+            self._logger.info("rosette folder exists")
+        else:
+            storage.add_folder("rosette")
+
 
     def get_settings_defaults(self):
         return dict(
@@ -190,8 +196,10 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
         self._logger.info(f"injected, orig: {orig_cmd}, new: {cmd}")
         return cmd
 
-    def resample_path_to_polar(self, matrix, path: Path, center=(0, 0), points=720):
+    def resample_path_to_polar(self, path: Path):
         # Sample points along the path
+        #Need to rethink this if value is not an int
+        points=int(360/self.a_inc)
         xs = []
         ys = []
         for i in range(points):
@@ -221,6 +229,7 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
         center = None
         #Do some error checking to verify it is SVG
         svg = SVG.parse(filename, reify=True)
+        """
         for e in svg.elements():
             if getattr(e, 'id', None) == 'center':
                 if isinstance(e, (Circle, Ellipse)):
@@ -232,9 +241,10 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
         
         matrix = svg[0].transform.inverse()
         transformed_center = matrix.transform_point(Point(center[0], center[1]))
+        """
         for e in svg.elements():
             if isinstance(e, Path):
-                angles, radii = self.resample_path_to_polar(matrix, e, center=center, points=int(360/self.a_inc))
+                angles, radii = self.resample_path_to_polar(e)
                 np.array(angles)
                 np.array(radii)
         #circularize
@@ -247,7 +257,7 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
         max_idx = np.argmax(radii)
         #sets max radius of rosette at A=0 for easy reference
         radii = np.roll(radii, -max_idx)
-        rosette = {"radii": radii, "angles": angles, "max_radius": max_radius, "min_radius": min_radius, "center": transformed_center}
+        rosette = {"radii": radii, "angles": angles, "max_radius": max_radius, "min_radius": min_radius}
         #self._logger.info(rosette)
         return rosette
 
@@ -297,7 +307,7 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
                     # Loop until we are ready to send the next chunk
                     tms = round(time.time() * 1000)
                     while self.feedcontrol["next"] - tms > self.ms_threshold or self.buffer < bf_target:
-                            time.sleep(self.ms_threshold/1000)
+                            time.sleep(self.ms_threshold/2000)
                             tms = round(time.time() * 1000)
                             if not self.running:
                                 break
