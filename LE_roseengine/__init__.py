@@ -39,12 +39,14 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
         self.a_inc = 0.5
         self.running = False
         self.inject = None
+        self.recording = False
         #contains all the raw values that can be transformed into working values
         self.rock_main = {}
         self.pump_main = {}
         self.rock_work = []
         self.pump_work = []
         self.working = []
+        self.progress = []
         self.last_position = None
         self.chunk = 10
         self.buffer = 0
@@ -120,6 +122,7 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
         # core UI here.
         return {
             "js": ["js/roseengine.js", "js/plotly-latest.min.js"],
+            "css": ["css/roseengine.css"],
         }
     
     def on_event(self, event, payload):
@@ -149,8 +152,6 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
             #self._printer.commands(self.reset_cmds)
             self._reset_gcode()
 
-
-
     def angle_from_center(self, x, y, cx, cy):
         angle_rad = math.atan2(y - cy, x - cx)
         return (math.degrees(angle_rad) + 360) % 360
@@ -174,13 +175,26 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
 
         return newradii
     
-    def _parametric_sine(self, num_peaks=1, amplitude=1.0, phase_shift=0.0):
-        result = []
-        for deg in range(0, 361, self.a_inc):
+    def _parametric_sine(self, data):
+        amplitude = float(data["amp"])
+        num_peaks = int(data["peak"])
+        phase_shift = float(data["phase"])
+        radii = []
+        angles = []
+        for deg in np.arange(0, 360, self.a_inc):
             radians = math.radians(deg + phase_shift)
             displacement = amplitude * math.sin(radians * num_peaks)
-            result.append((deg, displacement))
-        return result
+            angles.append(deg)
+            radii.append(displacement)
+        
+        rosette = {
+            "radii": radii,
+            "angles": angles,
+            "max_radius": None,
+            "min_radius": None
+        }
+
+        return rosette
 
 
     def _update_injection(self, cmd: str, axis_val: tuple) -> str:
@@ -323,7 +337,7 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
 
         self._logger.info(f"radii length:{len(radii)}")
         self._logger.info(f"angle length:{len(angles)}")
-        self._logger.info(rosette)
+        self._logger.debug(rosette)
         return rosette
 
     def _job_thread(self):  
@@ -338,6 +352,7 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
             loop_end = None
             cmdlist = []
             cmdlist.append("G92 A0")
+            cmdlist.append("M3 S1000")
             while self.running:
                 #A-axis reset
                 #cmdlist.append("G92 A0")
@@ -442,6 +457,7 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
         if self.pump_main and self.rock_main:
             gcode.append(f"G94 G90 G0 Z{z} X{x}")
             gcode.append(f"G0 A0")
+        gcode.append("M30")
         self.reset_cmds = False
         self._printer.commands(gcode)
         
@@ -469,7 +485,8 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
             get_arc_length=[],
             goto_start=[],
             clear=[],
-            update_rpm=[]
+            update_rpm=[],
+            parametric=[],
         )
     
     def on_api_command(self, command, data):
@@ -504,6 +521,22 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
                 self.send_le_error(msg)
             return
         
+        if command == "parametric":
+            rose_type = data["type"]
+            amp = data["amp"]
+            peak = data["peak"]
+            phase = data["phase"]
+            returndata = dict(type=rose_type, radii=None, angles=None, special=False, maxrad="Parametric", minrad=f"Amp:{amp}, Peak:{peak}, Ph:{phase}")
+            #do some stuff
+            rosette = self._parametric_sine(data)
+            self._logger.debug(rosette)
+            if rose_type == "rock":
+                self.rock_main = rosette
+            else:
+                self.pump_main = rosette
+            self._plugin_manager.send_plugin_message('roseengine', returndata)
+            return
+   
         if command == "start_job":
             self.rpm = float(data["rpm"])
             self.r_amp = float(data["r_amp"])
@@ -606,6 +639,8 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
     def hook_gcode_sending(self, comm_instance, phase, cmd, cmd_type, gcode, *args, **kwargs):
         if self.stopping and self.state == "Run":
             return (None, )
+        if self.recording:
+            self.progress.appened(cmd)
 
     ##~~ Softwareupdate hook
 

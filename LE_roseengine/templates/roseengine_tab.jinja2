@@ -17,6 +17,30 @@
                     <label for="r_amp">Rock amplitude:</label>
                     <input id="r_amp" type="number" value="0.5" max="5.0" step="any" data-bind="value: r_amp">            
                 </div>
+                <div class="parametric">
+                    <details>
+                        <summary>Parametric Sine Wave</summary>
+                        <div>
+                            <label for="samp">Ampltidue:</label>
+                            <input id="s_amp" type="number" value="1" step="any" data-bind="value: s_amp">
+                        </div>
+
+                        <div>
+                            <label for="peak">Peaks:</label>
+                            <input id="peak" type="number" value="1" step="1" data-bind="value: peak">
+                        </div>
+
+                        <div>
+                            <label for="pshift">Phase shift:</label>
+                            <input id="pshift" type="number" min="0" value="0" step="any" data-bind="value: pshift"> 
+                        </div>
+                        
+                        <div>
+                            <button id="create_para" class="btn" data-bind="click: function() {parametric_rosette('rock')}">Create Rock</button>
+                            <button id="create_para" class="btn" data-bind="click: function() {parametric_rosette('pump')}">Create Pump</button>
+                        </div>
+                    </details>
+                </div>
                 <div>
                     <button id="clear_rock" class="btn" data-bind="click: function() {clear_rosette('rock')}"> Clear</button>
                 </div>
@@ -56,7 +80,7 @@
         </div>
         
     </div>
-    <!-- Input Region (spans both columns) -->
+    <!-- Input Region -->
     <div id="lower" class="container-fluid">
        <hr>
     <div id="input_region" class="row-fluid span12" >
@@ -78,6 +102,23 @@
                 <button id="stop_job_button" class="btn btn-primary" data-bind="click: stopjob">Stop</button>
                 <button id="gotostart_button" class="btn btn-primary" data-bind="click: gotostart">Reset</button>
             </div>
+            <!-- Recording controls -->
+            
+            <div id="reccontrols" style="padding: 5px, 0px, 0px, 0px">
+                <label for="recontrols">Recording Controls</label>
+                <button id="recpause" title="Start/Pause Recording" class="btn box" style="border: 1px solid; width: 40px; height: 40px;">
+                <i class="fa-solid fa-circle-play"></i>
+                </button>
+
+                <button id="stoprec" title="Terminate recording and write file" class="btn box" style="border: 1px solid; width: 40px; height: 40px;">
+                <i class="fa-solid fa-circle-stop"></i>
+                </button>
+
+                <button id="deleterec" title="Trash current recording" class="btn box" style="border: 1px solid; width: 40px; height: 40px;">
+                <i class="fa-solid fa-trash"></i>
+                </button>           
+            </div>
+
         </div>
         <div id="controls" class="span6">
             <div>

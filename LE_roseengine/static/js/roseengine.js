@@ -28,6 +28,9 @@ $(function() {
         self.pump_invert = ko.observable(0);
 
         self.phase_offset = ko.observable(0);
+        self.s_amp = ko.observable(1.0);
+        self.peak = ko.observable(1);
+        self.pshift = ko.observable(0.0);
 
         tab = document.getElementById("tab_plugin_roseengine_link");
         tab.innerHTML = tab.innerHTML.replaceAll("Roseengine Plugin", "Rose Engine");
@@ -127,8 +130,8 @@ $(function() {
             var color = null;
             var area = null;
             console.log(rosette_info);
-            var maxrad = rosette_info.max.toFixed(2);
-            var minrad = rosette_info.min.toFixed(2);
+            var maxrad = isNaN(parseFloat(rosette_info.max)) ? rosette_info.max : parseFloat(rosette_info.max).toFixed(2);
+            var minrad = isNaN(parseFloat(rosette_info.min)) ? rosette_info.min : parseFloat(rosette_info.min).toFixed(2);
 
             if (type === "rock") {
                 radii = self.radii_rock;
@@ -240,6 +243,26 @@ $(function() {
                 .fail(function() {
                     console.error("Error message not sent");
                 });
+        };
+
+        self.parametric_rosette = function(type) {
+            
+            var data = {
+                type: type,
+                amp: self.s_amp(),
+                peak: self.peak(),
+                phase: self.pshift(),
+            }
+            
+            OctoPrint.simpleApiCommand("roseengine", "parametric", data)
+                .done(function(response) {
+                    console.log("Parametric sent");
+                })
+                .fail(function() {
+                    console.error("Parametric failed");
+                });
+
+
         };
 
         self.re_jog = function(dir) {
