@@ -46,7 +46,7 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
         self.rock_work = []
         self.pump_work = []
         self.working = []
-        self.progress = []
+        self.recorded = []
         self.last_position = None
         self.chunk = 10
         self.buffer = 0
@@ -471,7 +471,14 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
         if self.auto_reset:
             self.reset_cmds = True
             
-
+    def write_gcode(self):
+        filename = time.strftime("%Y%m%d-%H%M") + "roseengine.gcode"
+        path_on_disk = "{}/{}".format(self._settings.getBaseFolder("watched"), filename)
+        with open(path_on_disk,"w") as newfile:
+            #write in comment stuff here
+            for line in self.recorded:
+                newfile.write(f"\n{line}")
+        self.recorded = []
 
     def is_api_protected(self):
         return True
@@ -487,6 +494,7 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
             clear=[],
             update_rpm=[],
             parametric=[],
+            recording=[],
         )
     
     def on_api_command(self, command, data):
@@ -526,7 +534,7 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
             amp = data["amp"]
             peak = data["peak"]
             phase = data["phase"]
-            returndata = dict(type=rose_type, radii=None, angles=None, special=False, maxrad="Parametric", minrad=f"Amp:{amp}, Peak:{peak}, Ph:{phase}")
+            returndata = dict(type=rose_type, radii=None, angles=None, special=False, maxrad="Parametric", minrad=f"Amp:{amp}, Periods:{peak}")
             #do some stuff
             rosette = self._parametric_sine(data)
             self._logger.debug(rosette)
@@ -621,6 +629,26 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
             with self.rpm_lock:
                 self.updated_rpm = float(data["rpm"])
             return
+        
+        if command == "recording":
+            operation = data["op"]
+            if operation == "start":
+                if self.recording:
+                    self.recording = False
+                else:
+                    self.recording = True
+                self._logger.debug("Recording toggled")
+                return
+            if operation == "stop":
+                self.write_gcode()
+                self._logger.debug("Wrote recorded gcode")
+                return
+            if operation == "trash":
+                self.recorded = []
+                self._logger.debug("Removed existing gcode")
+                return
+
+
             
             
     def send_le_error(self, data):
@@ -640,7 +668,7 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
         if self.stopping and self.state == "Run":
             return (None, )
         if self.recording:
-            self.progress.appened(cmd)
+            self.recorded.append(cmd)
 
     ##~~ Softwareupdate hook
 

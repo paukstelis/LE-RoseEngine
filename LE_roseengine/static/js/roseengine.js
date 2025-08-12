@@ -8,6 +8,10 @@ $(function() {
     function RoseengineViewModel(parameters) {
         var self = this;
         self.global_settings = parameters[0];
+        self.available = ko.observable(true); //Can we interact with this plugin
+        self.running = ko.observable(false);
+        self.is_printing = ko.observable(false);
+        self.is_operational = ko.observable(false);
         self.radii_rock = [];
         self.angles_rock = [];
         self.radii_pump = [];
@@ -31,6 +35,11 @@ $(function() {
         self.s_amp = ko.observable(1.0);
         self.peak = ko.observable(1);
         self.pshift = ko.observable(0.0);
+
+        //Recording
+        self.recording  = ko.observable(false);
+        self.lines = ko.observable(0); //number of lines written/stored
+
 
         tab = document.getElementById("tab_plugin_roseengine_link");
         tab.innerHTML = tab.innerHTML.replaceAll("Roseengine Plugin", "Rose Engine");
@@ -73,16 +82,39 @@ $(function() {
 
         self.onBeforeBinding = function () {
             self.settings = self.global_settings.settings.plugins.roseengine;
-            console.log(self.settings);
+            self.is_printing(self.global_settings.settings.plugins.latheengraver.is_printing());
+            self.is_operational(self.global_settings.settings.plugins.latheengraver.is_operational());
+            //console.log(self.settings);
             self.fetchProfileFiles();
             self.a_inc = self.settings.a_inc();
-            console.log("binding self.a_inc")
-            console.log(self.a_inc);
+            //console.log("binding self.a_inc")
+            //console.log(self.a_inc);
             var po = $('#po_span');
             var po_slider = $('#pump_offset');
             po_slider.attr("step", self.a_inc);
             
 
+        };
+
+        self._processStateData = function(data) {
+            
+            self.is_printing(data.flags.printing);
+            self.is_operational(data.flags.operational);
+            self.isLoading(data.flags.loading);
+
+            
+            if (self.is_printing() && !self.running()) {
+              self.available = false;
+            }
+
+            if(!self.is_printing() || self.running()) {
+                self.available = true;
+            }
+
+            if (!self.is_operational()) {
+              self.available = false;
+            }
+            console.log(available);
         };
 
         $("#rock_file_select").on("change", function () {
@@ -129,10 +161,13 @@ $(function() {
             var theta = null;
             var color = null;
             var area = null;
-            console.log(rosette_info);
-            var maxrad = isNaN(parseFloat(rosette_info.max)) ? rosette_info.max : parseFloat(rosette_info.max).toFixed(2);
-            var minrad = isNaN(parseFloat(rosette_info.min)) ? rosette_info.min : parseFloat(rosette_info.min).toFixed(2);
-
+            //console.log(rosette_info);
+            var maxrad = isNaN(parseFloat(rosette_info.max))
+                ? rosette_info.max
+                : "r max=" + parseFloat(rosette_info.max).toFixed(2);
+            var minrad = isNaN(parseFloat(rosette_info.min))
+                ? rosette_info.min
+                : "r min=" + parseFloat(rosette_info.min).toFixed(2);
             if (type === "rock") {
                 radii = self.radii_rock;
                 theta = self.theta_rock;
@@ -166,7 +201,7 @@ $(function() {
             var layout = {
                 autosize: true,
                 title: {
-                    text: 'r max='+maxrad+'<br>'+'r min='+minrad+'<br>'+type,
+                    text: maxrad+'<br>'+minrad+'<br>'+type,
                     font: {
                         size: 12
                     },
@@ -282,6 +317,44 @@ $(function() {
 
         };
 
+        self.record = function(operation) {
+            var data = {
+                op: operation,
+            }
+
+            if (operation === "start") {
+                var elem = $("#recpause");
+                var icon = $("i", elem);
+                if (icon.hasClass("fa-play")) {
+                    icon.removeClass("fa-play").addClass("fa-pause");
+                } else {
+                    icon.removeClass("fa-pause").addClass("fa-play");
+                }
+            }
+
+            OctoPrint.simpleApiCommand("roseengine", "recording", data)
+                .done(function(response) {
+                    console.log("recording command sent");
+                    if (data.op == 'trash' || data.op == 'stop') {
+                        self.recording = false;
+                    }
+                    
+                    if (data.op == 'start' || self.recording() ) {
+                        self.recording = false;
+                    }
+
+                    if (data.op == 'start' || !self.recording() ) {
+                        self.recording = true;
+                    }
+
+                })
+                .fail(function() {
+                    console.error("Jog failed");
+                });
+
+
+        }
+
         self.load_rosette = function(filePath, type) {
             var data = {
                 filepath: filePath,
@@ -331,6 +404,7 @@ $(function() {
             OctoPrint.simpleApiCommand("roseengine", "start_job", data)
                 .done(function(response) {
                     console.log("Start sent");
+                    self.running = true;
                 })
                 .fail(function() {
                     console.error("Start failed");
@@ -347,6 +421,7 @@ $(function() {
             OctoPrint.simpleApiCommand("roseengine", "stop_job", data)
                 .done(function(response) {
                     console.log("Stop sent");
+                    self.running = false;
                 })
                 .fail(function() {
                     console.error("Stop failed");
@@ -377,10 +452,10 @@ $(function() {
 
             OctoPrint.simpleApiCommand("roseengine", "update_rpm", data)
                 .done(function(response) {
-                    console.log("GCode written successfully.");
+                    console.log("RPM updated.");
                 })
                 .fail(function() {
-                    console.error("Failed to write GCode.");
+                    console.error("Failed to update RPM");
                 });
 
 
