@@ -2,3 +2,10 @@
   box-shadow: 5px 5px 10px rgba(122, 54, 54, 0.5);
   transition: box-shadow 0.3s ease-in-out;
 }
+.row-fluid {
+    display: flex;
+    align-items: stretch;
+}
+#rock_area, #pump_area {
+    flex: 1;
+}

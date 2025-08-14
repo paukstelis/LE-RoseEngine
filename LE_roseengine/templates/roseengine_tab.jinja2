@@ -4,9 +4,9 @@
 
     <div class="row-fluid justify-content-start">
         <!-- Rock Column -->
-        <div class="span6">
+        <div id="rock" class="span6">
             <div id="rockarea" style="height: 300px; "></div>
-            <div id="rock_controls" class="mt-3">
+            <div id="rock_controls" class="">
                 <div>
                     <label for="rock_file_select">Select Rock Rosette:</label> 
                         <select id="rock_file_select">
@@ -34,13 +34,13 @@
                         </div>
                     </details>
                 </div>
-                <div>
+                <div style="margin-top: auto; display: flex; justify-content: center;">
                     <button id="clear_rock" class="btn" data-bind="click: function() {clear_rosette('rock')}"> Clear</button>
                 </div>
             </div>
         </div>
         <!-- Pump Column -->
-        <div class="span6">
+        <div id="pump" class="span6">
             <div id="pumparea" style="height: 300px; "></div>
             <div id="pump_controls" class="">
                 <div>
@@ -65,7 +65,7 @@
                         <input id="pump_invert" type="checkbox" data-bind="checked: pump_invert">
                     </label>
                 </div>
-                <div>
+                <div style="margin-top: auto; display: flex; justify-content: center;">
                     <button id="clear_rock" class="btn" data-bind="click: function() {clear_rosette('pump')}"> Clear</button>
                 </div>
                 <!-- Add more pump-specific controls here if needed -->
@@ -84,20 +84,35 @@
                     <input class="slider" id="rpm" type="range" min="0.25" max="6" step="0.25" data-bind="value: rpm, valueUpdate: 'input'">
                     <br><strong data-bind="text: rpm()"></strong>   
             </div>
-            <div>
-                <label title="forward" data-toggle="tooltip" for="forward">
+            <div style="padding: 10px 0px 0px 0px;">
+                <label title="Uncheck to run spindle in reverse" data-toggle="tooltip" for="forward">
                     Spindle forward:
                     <input id="forward" type="checkbox" checked data-bind="checked: forward">
                 </label>
             </div>
+
             <div>
+                <details>
+                    <summary>Ellipitical Chuck</summary>
+                    <div>
+                        <label for="e_rad" title="Major radius of ellipse for calculation purposes. All shift values will be relative to this." >Nominal radius (mm):</label>
+                        <input id="e_rad" type="number" value="1" step="any" data-bind="value: e_rad">
+                    </div>
+                    <div>
+                        <label for="ratio" title="Ratio of major to minor. Value of 1 will be a circle." >Ratio:</label>
+                        <input id="ratio" type="number" min="1.0" step="any" data-bind="value: e_ratio">
+                    </div>                       
+                </details>
+            </div>
+
+            <div style="padding: 10px 0px 0px 0px;">
                 <button id="start_job_button" class="btn btn-primary" data-bind="enable: is_operational() && available(), click: startjob">Start</button>
                 <button id="stop_job_button" class="btn btn-primary" data-bind="click: stopjob">Stop</button>
                 <button id="gotostart_button" class="btn btn-primary" data-bind="click: gotostart">Reset</button>
             </div>
             <!-- Recording controls -->
             
-            <div id="reccontrols" style="padding: 5px, 0px, 0px, 0px">
+            <div id="reccontrols" style="padding: 10px 5px 0px 0px;">
                 <label for="recontrols">Recording Controls</label>
                 <button id="recpause" title="Start/Pause Recording" class="btn box" style="border: 1px solid; width: 40px; height: 40px;" data-bind="click: function() {record('start')}">
                 <i class="fa fa-play"></i>
@@ -118,11 +133,13 @@
                 <label title="Relative movement distance (absolute value)" for="dist">Movement Distance:</label>
                 <input id="dist" type="number" value="0.5" min="0" max="360" step="any" data-bind="value: dist">            
             </div>
+
             <div>
             <!-- ko foreach: distances -->
                 <button id="ctrl-distance-$data" type="button" class="btn dist" style="border: 1px solid; margin: 5px 0px 0px 0px" data-bind="attr: { id: 'ctrl-distance-' + $index() }, click: function() { $parent.distClicked($data) }, text: $data"></button>
             <!-- /ko -->
             </div>
+
             <div style="padding: 5px 5px 2px 0px;" >
                 <table id="jogger" border="0" style="margin: 0 auto;">
                 <tbody>

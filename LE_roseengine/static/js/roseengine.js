@@ -36,6 +36,9 @@ $(function() {
         self.peak = ko.observable(1);
         self.pshift = ko.observable(0.0);
 
+        self.e_rad = ko.observable(10.0);
+        self.e_ratio = ko.observable(1.0);
+
         //Recording
         self.recording  = ko.observable(false);
         self.lines = ko.observable(0); //number of lines written/stored
@@ -92,6 +95,8 @@ $(function() {
             var po = $('#po_span');
             var po_slider = $('#pump_offset');
             po_slider.attr("step", self.a_inc);
+
+
             
 
         };
@@ -199,9 +204,15 @@ $(function() {
             };
 
             var layout = {
-                autosize: true,
+                margin: {
+                l: 30,
+                r: 30,
+                b: 10,
+                t: 40,
+                pad: 4
+                },
                 title: {
-                    text: maxrad+'<br>'+minrad+'<br>'+type,
+                    text: maxrad+'<br>'+minrad,
                     font: {
                         size: 12
                     },
@@ -225,11 +236,20 @@ $(function() {
             };
 
             //Make a plot
-            Plotly.newPlot(area,[trace], layout);
+            Plotly.newPlot(area,[trace], layout,{displayModeBar: false});
 
         };
 
         self.onDataUpdaterPluginMessage = function(plugin, data) {
+
+            if (plugin == 'roseengine' && data.seticon == 'rec') {
+                var elem = $("#recpause");
+                var icon = $("i", elem);
+                if (icon.hasClass("fa-pause")) {
+                    icon.removeClass("fa-pause").addClass("fa-play");
+                }
+            }
+
             if (plugin == 'roseengine' && data.type == 'rock') {
                 self.radii_rock = data.radii;
                 self.angles_rock = data.angles;
@@ -387,6 +407,8 @@ $(function() {
                     console.error("clear failed");
                 });
 
+            self.fetchProfileFiles();
+
         };
 
         self.startjob = function() {
@@ -398,6 +420,8 @@ $(function() {
                 forward: self.forward(),
                 pump_offset: self.pump_offset(),
                 pump_invert: self.pump_invert(),
+                e_rad: self.e_rad(),
+                e_ratio: self.e_ratio(),
 
             };
 
@@ -562,6 +586,10 @@ $(function() {
             //Clear on page reload
             self.clear_rosette("pump");
             self.clear_rosette("rock");
+            //Make the rock controls the same size as pump
+            var pump_height = $('pump').outerHeight();
+            $('#rock').height(pump_height);
+            console.log("pump height:"+pump_height);
 
         });
 

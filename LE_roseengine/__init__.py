@@ -77,6 +77,8 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
         self.rock_para = False
         self.pump_para = False
 
+        self.ellipse = None
+
     def initialize(self):
         self.datafolder = self.get_plugin_data_folder()
         self._event_bus.subscribe("LATHEENGRAVER_SEND_POSITION", self.get_position)
@@ -195,7 +197,15 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
         }
 
         return rosette
-
+    
+    def _ellipse_rad(self, angle):
+        angle_rad = np.deg2rad(angle)
+        a = self.ellipse["a"]
+        ratio = self.ellipse["ratio"]
+        b = a / ratio
+        
+        r = (a * b) / np.sqrt((b * np.cos(angle_rad))**2 + (a * np.sin(angle_rad))**2)
+        return r
 
     def _update_injection(self, cmd: str, axis_val: tuple) -> str:
         axis, delta = axis_val
@@ -224,10 +234,14 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
         self._logger.info(f"injected, orig: {orig_cmd}, new: {cmd}")
         return cmd
 
-    def resample_path_to_polar(self, path):
-        xmin, xmax, ymin, ymax = path.bbox()
-        cx = (xmin + xmax) / 2
-        cy = (ymin + ymax) / 2
+    def resample_path_to_polar(self, path, center=None):
+        if not center:
+            xmin, xmax, ymin, ymax = path.bbox()
+            cx = (xmin + xmax) / 2
+            cy = (ymin + ymax) / 2
+        else:
+            cx = center[0]
+            cy = center[1]
         polar_points = []
         radii = []
         angles = []
@@ -278,7 +292,13 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
         filename = f"{folder}/{filepath}"
         paths, attributes = svg2paths(filename)
         path = paths[0]  # assume single path
-        angles, radii = self.resample_path_to_polar(path)
+        center = None
+        for a in attributes:
+            if a["id"] == "center":
+                center = (float(a["cx"]), float(a["cy"]))
+                break
+
+        angles, radii = self.resample_path_to_polar(path, center)
         
         radii = np.array(radii)
         angles = np.array(angles)
@@ -372,7 +392,7 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
                 next_interval = int(degrees_chunk / degrees_sec * 1000)  # in milliseconds
                 self.feedcontrol["next"] = self.feedcontrol["current"] + next_interval
                 #self._logger.info(f"Next interval at {self.rpm} RPM, {next_interval}, bf_target {bf_target}")
-
+                current_angle = 0
                 for i in range(0, len(self.working), self.chunk):
               
                     with self.rpm_lock:
@@ -386,9 +406,17 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
                     feed = (360/self.a_inc) * self.rpm
                     cmdchunk = self.working[i:i+self.chunk]
                     #self.buffer = 0
+                    #need to know the actual angle so we know where we are for ellipse
+                    current_angle = i * self.a_inc
                     for cmd in cmdchunk:
-                        #can add variable conditional if  we want to swap X and Z
-                        cmdlist.append(f"G93 G91 G1 A{dir}{self.a_inc} X{cmd[1]:0.3f} Z{cmd[0]:0.3f} F{feed:0.1f}")
+                        x = cmd[1]
+                        z = cmd[0]
+                        mod = cmd[2]
+                        #modify z values if we have elliptical chuck setting
+                        if self.ellipse:
+                            z = z + mod
+                        current_angle = current_angle + self.a_inc
+                        cmdlist.append(f"G93 G91 G1 A{dir}{self.a_inc} X{x:0.3f} Z{z:0.3f} F{feed:0.1f}")
                     if self.inject:
                         cmdlist[-1] = self._update_injection(cmdlist[-1], self.inject)
                         self.inject = None
@@ -420,6 +448,10 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
     def _start_job(self):
         if self.running:
             return
+        
+        #additional array, might want to rethink how this works
+        modifier = []
+        mod_array = np.array(modifier)
         if self.rock_main:
             self.rock_work = self.create_working_path(self.rock_main, self.r_amp)
         if self.pump_main:
@@ -431,8 +463,16 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
                 #base the roll on self.a_inc
                 roll = int(self.pump_offset/self.a_inc)
                 self.pump_work = np.roll(self.pump_work, roll)
-
-        self.working = list(zip_longest(self.rock_work, self.pump_work, fillvalue=0))
+        if self.ellipse:
+            e_vals = []
+            for deg in np.arange(0, 360, self.a_inc):
+                e_rad = self._ellipse_rad(deg)
+                e_vals.append(e_rad)
+            #difference values
+            e_a = np.array(e_vals)
+            mod_array = np.roll(e_a, -1) - e_a
+    
+        self.working = list(zip_longest(self.rock_work, self.pump_work, mod_array, fillvalue=0))
         self.start_coords["x"] = self.current_x
         self.start_coords["z"] = self.current_z
         self.start_coords["a"] = 0.0
@@ -553,6 +593,12 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
             self.pump_invert = bool(data["pump_invert"])
             self.pump_offset = float(data["pump_offset"])
             self._logger.info("ready to start job")
+            if float(data["e_ratio"]) > 1.0:
+                rad = float(data["e_rad"])
+                ratio = float(data["e_ratio"])
+                self.ellipse = {"a" : rad, "ratio" : ratio }
+            else:
+                self.ellipse = None
             self._start_job()
             return
 
@@ -642,14 +688,16 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
             if operation == "stop":
                 self.write_gcode()
                 self._logger.debug("Wrote recorded gcode")
+                self.recording = False
+                self.recorded = []
+                #need to toggle button here
+                returndata = dict(seticon="rec")
+                self._plugin_manager.send_plugin_message('roseengine', returndata)
                 return
             if operation == "trash":
                 self.recorded = []
                 self._logger.debug("Removed existing gcode")
                 return
-
-
-            
             
     def send_le_error(self, data):
         
