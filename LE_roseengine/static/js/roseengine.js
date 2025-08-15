@@ -249,6 +249,7 @@ $(function() {
                 var icon = $("i", elem);
                 if (icon.hasClass("fa-pause")) {
                     icon.removeClass("fa-pause").addClass("fa-play");
+                    $("#recpause").removeClass("recording-effect");
                 }
             }
 
@@ -350,8 +351,10 @@ $(function() {
                 var icon = $("i", elem);
                 if (icon.hasClass("fa-play")) {
                     icon.removeClass("fa-play").addClass("fa-pause");
+                    $("#recpause").addClass("recording-effect");
                 } else {
                     icon.removeClass("fa-pause").addClass("fa-play");
+                    $("#recpause").removeClass("recording-effect");
                 }
             }
 
