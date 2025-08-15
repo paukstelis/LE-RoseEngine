@@ -2,11 +2,11 @@
 
 <div id="roseengine_plugin_main" class="container-fluid">
 
-    <div class="row-fluid">
+    <div class="row-fluid justify-content-start">
         <!-- Rock Column -->
-        <div class="span6">
-            <div id="rockarea" style="height: 300px;"></div>
-            <div id="rock_controls" class="mt-3">
+        <div id="rock" class="span6">
+            <div id="rockarea" style="height: 300px; "></div>
+            <div id="rock_controls" class="">
                 <div>
                     <label for="rock_file_select">Select Rock Rosette:</label> 
                         <select id="rock_file_select">
@@ -14,18 +14,44 @@
                         </select>    
                 </div>
                 <div>
-                    <label for="r_amp">Rock amplitude:</label>
+                    <label title="Amplitude scale factor for rocking" for="r_amp">Rock amplitude:</label>
                     <input id="r_amp" type="number" value="0.5" max="5.0" step="any" data-bind="value: r_amp">            
                 </div>
-                <div>
+                <div class="parametric">
+                    <details>
+                        <summary>Periodic Wave Functions</summary>
+                         <div>
+                            <label>Wave Function:</label>
+                            <select id="wave_type" data-bind="value: wave_type">
+                                <option value="sin">Sine</option>
+                                <option value="tri">Triangle</option>
+                                <option value="square">Square</option>
+                                <option value="saw">Sawtooth</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label for="samp">Amplitude (mm):</label>
+                            <input id="s_amp" type="number" value="1" step="any" data-bind="value: s_amp">
+                        </div>
+                        <div>
+                            <label title="The number of complete periods per 360 degrees" for="peak">Periods:</label>
+                            <input id="peak" type="number" value="1" step="1" data-bind="value: peak">
+                        </div>                       
+                        <div>
+                            <button id="create_para" class="btn" data-bind="click: function() {parametric_rosette('rock')}">Create Rock</button>
+                            <button id="create_para" class="btn" data-bind="click: function() {parametric_rosette('pump')}">Create Pump</button>
+                        </div>
+                    </details>
+                </div>
+                <div style="padding: 30px 0px 0px 0px;justify-content: center;">
                     <button id="clear_rock" class="btn" data-bind="click: function() {clear_rosette('rock')}"> Clear</button>
                 </div>
             </div>
         </div>
         <!-- Pump Column -->
-        <div class="span6">
-            <div id="pumparea" style="height: 300px;"></div>
-            <div id="pump_controls" class="mt-3">
+        <div id="pump" class="span6">
+            <div id="pumparea" style="height: 300px; "></div>
+            <div id="pump_controls" class="">
                 <div>
                     <label for="pump_file_select">Select Pump Rosette:</label> 
                         <select id="pump_file_select">
@@ -34,58 +60,145 @@
                            
                 </div>
                 <div>
-                    <label for="p_amp">Pump amplitude:</label>
+                    <label title="Amplitude scale factor" for="p_amp">Pump amplitude:</label>
                     <input id="p_amp" type="number" value="0.5" max="5.0" step="any" data-bind="value: p_amp">            
                 </div>
                 <div>
-                    <label title="Phase offset, must be in internvals of angle increments" data-toggle="tooltip" for="pump_offset">Phase offset</label>
+                    <label title="Phase offset, must be in intervals of angle increments" data-toggle="tooltip" for="pump_offset">Phase offset</label>
                     <p><strong data-bind="text: pump_offset()"></strong></p>
                     <input class="slider" id="pump_offset" type="range" min="0.0" max="360.0" step="0.5" data-bind="value: pump_offset, valueUpdate: 'input'">
                 </div>
                 <div>
+                    <label title="Invert pumping direction" data-toggle="tooltip" for="pump_invert">
+                        Invert pump:
+                        <input id="pump_invert" type="checkbox" data-bind="checked: pump_invert">
+                    </label>
+                </div>
+                <div style="margin-top: auto; display: flex; justify-content: center;">
                     <button id="clear_rock" class="btn" data-bind="click: function() {clear_rosette('pump')}"> Clear</button>
                 </div>
                 <!-- Add more pump-specific controls here if needed -->
             </div>
         </div>
+        
     </div>
-    <!-- Input Region (spans both columns) -->
-    <div id="input_region" class="row mt-4" >
+    <!-- Input Region -->
     <hr>
-        <div class="col-12">
-                <div style="padding: 0px 10px 10px 10px;">
-                        <center><label title="RPM" data-toggle="tooltip" for="rpm">RPM</label>
-                        <input class="slider" id="rpm" type="range" min="0.25" max="6" step="0.25" data-bind="value: rpm, valueUpdate: 'input'">
-                        <br><strong data-bind="text: rpm()"></strong>
-                        </center>    
-                </div>
-                <div>
-                    <label title="forward" data-toggle="tooltip" for="forward">
-                        Spindle forward:
-                        <input id="forward" type="checkbox" checked data-bind="checked: forward">
-                    </label>
-                </div>
-        </div>
-    </div>
+    <div id="lower" class="justify-content-start">
+    <div id="input_region" class="row-fluid span12" >
+    
+        <div id="running" class="span6" style="float: left;">
+            <div>
+                    <label title="RPM" data-toggle="tooltip" for="rpm">RPM</label>
+                    <input class="slider" id="rpm" type="range" min="0.25" max="6" step="0.25" data-bind="value: rpm, valueUpdate: 'input'">
+                    <br><strong data-bind="text: rpm()"></strong>   
+            </div>
+            <div style="padding: 10px 0px 0px 0px;">
+                <label title="Uncheck to run spindle in reverse" data-toggle="tooltip" for="forward">
+                    Spindle forward:
+                    <input id="forward" type="checkbox" checked data-bind="checked: forward">
+                </label>
+            </div>
 
-    <!-- Control Region (spans both columns) -->
-    <div id="roseengine_actions" class="row mt-3">
-        <div class="col-12">
-            <button id="start_job_button" class="btn btn-primary" data-bind="click: startjob">Start</button>
-            <button id="stop_job_button" class="btn btn-primary" data-bind="click: stopjob">Stop</button>
-            <button id="gotostart_button" class="btn btn-primary" data-bind="click: gotostart">Reset</button>
-            <button id="control-zdown" class="btn box" style="border: 1px solid; width: 40px; height: 40px;" data-bind="click: function() {jog('down')}">
-                <i class="fa fa-arrow-up"></i>
-            </button>
-            <button id="control-zup" class="btn box" style="border: 1px solid; width: 40px; height: 40px;" data-bind="click: function() {jog('up')}">
-                <i class="fa fa-arrow-down"></i>
-            </button>
-            <button id="control-xdown" class="btn box" style="border: 1px solid; width: 40px; height: 40px;" data-bind="click: function() {jog('left')}">
-                <i class="fa fa-arrow-left"></i>
-            </button>
-            <button id="control-xup" class="btn box" style="border: 1px solid; width: 40px; height: 40px;" data-bind="click: function() {jog('right')}">
-                <i class="fa fa-arrow-right"></i>
-            </button>
+            <div>
+                <details>
+                    <summary>Ellipitical Chuck</summary>
+                    <div>
+                        <label for="e_rad" title="Major radius of ellipse for calculation purposes. All shift values will be relative to this." >Nominal radius (mm):</label>
+                        <input id="e_rad" type="number" value="1" step="any" data-bind="value: e_rad">
+                    </div>
+                    <div>
+                        <label for="ratio" title="Ratio of major to minor. Value of 1 will be a circle." >Ratio:</label>
+                        <input id="ratio" type="number" min="1.0" step="any" data-bind="value: e_ratio">
+                    </div>                       
+                </details>
+            </div>
+
+            <div style="padding: 10px 0px 0px 0px;">
+                <button id="start_job_button" class="btn btn-primary" data-bind="enable: is_operational() && available(), click: startjob">Start</button>
+                <button id="stop_job_button" class="btn btn-primary" data-bind="click: stopjob">Stop</button>
+                <button id="gotostart_button" class="btn btn-primary" data-bind="click: gotostart">Reset</button>
+            </div>
+            <!-- Recording controls -->
+            
+            <div id="reccontrols" style="padding: 10px 5px 0px 0px;">
+                <label for="recontrols">Recording Controls</label>
+                <button id="recpause" title="Start/Pause Recording" class="btn box" style="border: 1px solid; width: 40px; height: 40px;" data-bind="click: function() {record('start')}">
+                <i class="fa fa-play"></i>
+                </button>
+
+                <button id="stoprec" title="Terminate recording and write file" class="btn box" style="border: 1px solid; width: 40px; height: 40px;" data-bind="click: function() {record('stop')}">
+                <i class="fa fa-save"></i>
+                </button>
+
+                <button id="deleterec" title="Trash current recording" class="btn box" style="border: 1px solid; width: 40px; height: 40px;" data-bind="click: function() {record('trash')}">
+                <i class="fa fa-trash"></i>
+                </button>           
+            </div>
+
+        </div>
+        <div id="controls" class="span6">
+            <div>
+                <label title="Relative movement distance (absolute value)" for="dist">Movement Distance:</label>
+                <input id="dist" type="number" value="0.5" min="0" max="360" step="any" data-bind="value: dist">            
+            </div>
+
+            <div>
+            <!-- ko foreach: distances -->
+                <button id="ctrl-distance-$data" type="button" class="btn dist" style="border: 1px solid; margin: 5px 0px 0px 0px" data-bind="attr: { id: 'ctrl-distance-' + $index() }, click: function() { $parent.distClicked($data) }, text: $data"></button>
+            <!-- /ko -->
+            </div>
+
+            <div style="padding: 5px 5px 2px 0px;" >
+                <table id="jogger" border="0" style="margin: 0 auto;">
+                <tbody>
+                <tr>
+                    <td>
+                        <button id="hidden1" class="btn box" style="visibility: hidden; border: 1px solid; width: 40px; height: 40px;" data-bind="click: function() {re_jog('down')}">
+                            <i class="fa fa-arrow-up"></i>
+                        </button>
+
+                        <button id="ctrl-zdown" class="btn box" style="border: 1px solid; width: 40px; height: 40px;" data-bind="enable: available(), click: function() {re_jog('down')}">
+                            <i class="fa fa-arrow-up"></i>
+                        </button>
+
+                        <button id="hidden2" class="btn box" style="visibility: hidden; border: 1px solid; width: 40px; height: 40px;" data-bind="click: function() {re_jog('down')}">
+                            <i class="fa fa-arrow-up"></i>
+                        </button>
+                    </td>
+                </tr>
+                <tr>
+                    <td>
+                        <button id="ctrl-xdown" class="btn box" style="border: 1px solid; width: 40px; height: 40px;" data-bind="enable: is_operational() && available(), click: function() {re_jog('left')}">
+                            <i class="fa fa-arrow-left"></i>
+                        </button>
+
+                        <button id="hidden3" class="btn box" style="visibility: hidden; border: 1px solid; width: 40px; height: 40px;" data-bind="click: function() {re_jog('down')}">
+                            <i class="fa fa-arrow-up"></i>
+                        </button>
+
+                        <button id="ctrl-xup" class="btn box" style="border: 1px solid; width: 40px; height: 40px;" data-bind="enable: is_operational() && available(), click: function() {re_jog('right')}">
+                            <i class="fa fa-arrow-right"></i>
+                        </button>
+                    </td>
+                </tr>
+                <tr>
+                    <td>
+                        <button id="ctrl-aplus" title="Rotate A positive" class="btn box" style="border: 1px solid; width: 40px; height: 40px;" data-bind="enable: is_operational() && available(), click: function() {re_jog('plus')}">
+                            <i class="fa fa-rotate-left"></i>
+                        </button>
+                        <button id="ctrl-zup" class="btn box" style="border: 1px solid; width: 40px; height: 40px;" data-bind="enable: is_operational() && available(), click: function() {re_jog('up')}">
+                        <i class="fa fa-arrow-down"></i>
+                        </button>
+                        <button id="ctrl-aminus" title="Rotate A negative" class="btn box" style="border: 1px solid; width: 40px; height: 40px;" data-bind="enable: is_operational() && available(), click: function() {re_jog('minus')}">
+                            <i class="fa fa-rotate-right"></i>
+                        </button>
+                    </td>
+                </tr>
+                </tbody>
+            </table>    
+            </div>
         </div>
     </div>
+</div>
 </div>
