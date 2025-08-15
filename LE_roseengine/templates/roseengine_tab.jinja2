@@ -19,7 +19,16 @@
                 </div>
                 <div class="parametric">
                     <details>
-                        <summary>Parametric Sine Wave</summary>
+                        <summary>Periodic Wave Functions</summary>
+                         <div>
+                            <label>Wave Function:</label>
+                            <select id="wave_type" data-bind="value: wave_type">
+                                <option value="sin">Sine</option>
+                                <option value="tri">Triangle</option>
+                                <option value="square">Square</option>
+                                <option value="saw">Sawtooth</option>
+                            </select>
+                        </div>
                         <div>
                             <label for="samp">Amplitude (mm):</label>
                             <input id="s_amp" type="number" value="1" step="any" data-bind="value: s_amp">
@@ -34,7 +43,7 @@
                         </div>
                     </details>
                 </div>
-                <div style="margin-top: auto; display: flex; justify-content: center;">
+                <div style="padding: 30px 0px 0px 0px;justify-content: center;">
                     <button id="clear_rock" class="btn" data-bind="click: function() {clear_rosette('rock')}"> Clear</button>
                 </div>
             </div>

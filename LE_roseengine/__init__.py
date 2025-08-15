@@ -178,14 +178,31 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
         return newradii
     
     def _parametric_sine(self, data):
+        wave = data["wave_type"]
         amplitude = float(data["amp"])
         num_peaks = int(data["peak"])
         phase_shift = float(data["phase"])
         radii = []
         angles = []
+        phase_shift_rad = math.radians(phase_shift)
         for deg in np.arange(0, 360, self.a_inc):
-            radians = math.radians(deg + phase_shift)
-            displacement = amplitude * math.sin(radians * num_peaks)
+            radians = math.radians(deg)
+            if wave == "sin":
+                displacement = amplitude * math.sin(num_peaks * radians + phase_shift_rad)
+            elif wave == "tri":
+                # Triangle wave, centered at zero
+                displacement = amplitude * (2 / math.pi) * np.arcsin(np.sin(num_peaks * radians + phase_shift_rad))
+            elif wave == "square":
+                # Square wave: sign of sine
+                displacement = amplitude * np.sign(np.sin(num_peaks * radians + phase_shift_rad))
+            elif wave == "saw":
+                # Sawtooth wave: ramp from -amplitude to +amplitude
+                # Normalize angle to [0, 2pi) for each period
+                period = 2 * math.pi / num_peaks
+                value = ((radians + phase_shift_rad) % period) / period
+                displacement = amplitude * (2 * value - 1)
+            else:
+                displacement = 0
             angles.append(deg)
             radii.append(displacement)
         
@@ -463,6 +480,8 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
                 #base the roll on self.a_inc
                 roll = int(self.pump_offset/self.a_inc)
                 self.pump_work = np.roll(self.pump_work, roll)
+                #amp_offset = self.pump_work[0]
+                #self.pump_work = self.pump_work - amp_offset
         if self.ellipse:
             e_vals = []
             for deg in np.arange(0, 360, self.a_inc):
@@ -571,10 +590,11 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
         
         if command == "parametric":
             rose_type = data["type"]
+            wave_type = data["wave_type"]
             amp = data["amp"]
             peak = data["peak"]
             phase = data["phase"]
-            returndata = dict(type=rose_type, radii=None, angles=None, special=False, maxrad="Parametric", minrad=f"Amp:{amp}, Periods:{peak}")
+            returndata = dict(type=rose_type, radii=None, angles=None, special=False, maxrad=f"{wave_type}", minrad=f"Amp:{amp}, Periods:{peak}")
             #do some stuff
             rosette = self._parametric_sine(data)
             self._logger.debug(rosette)

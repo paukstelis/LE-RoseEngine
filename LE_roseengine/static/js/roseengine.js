@@ -35,9 +35,11 @@ $(function() {
         self.s_amp = ko.observable(1.0);
         self.peak = ko.observable(1);
         self.pshift = ko.observable(0.0);
-
+        self.wave_type = ko.observable(null);
         self.e_rad = ko.observable(10.0);
         self.e_ratio = ko.observable(1.0);
+
+
 
         //Recording
         self.recording  = ko.observable(false);
@@ -307,6 +309,7 @@ $(function() {
                 amp: self.s_amp(),
                 peak: self.peak(),
                 phase: self.pshift(),
+                wave_type: self.wave_type(),
             }
             
             OctoPrint.simpleApiCommand("roseengine", "parametric", data)
