@@ -108,20 +108,16 @@ $(function() {
             self.is_printing(data.flags.printing);
             self.is_operational(data.flags.operational);
             self.isLoading(data.flags.loading);
-
             
             if (self.is_printing() && !self.running()) {
-              self.available = false;
+              self.available(false);
             }
 
             if(!self.is_printing() || self.running()) {
-                self.available = true;
+                self.available(true);
             }
 
-            if (!self.is_operational()) {
-              self.available = false;
-            }
-            console.log(available);
+            console.log(self.available());
         };
 
         $("#rock_file_select").on("change", function () {
@@ -434,7 +430,7 @@ $(function() {
             OctoPrint.simpleApiCommand("roseengine", "start_job", data)
                 .done(function(response) {
                     console.log("Start sent");
-                    self.running = true;
+                    self.running(true);
                 })
                 .fail(function() {
                     console.error("Start failed");
@@ -451,7 +447,7 @@ $(function() {
             OctoPrint.simpleApiCommand("roseengine", "stop_job", data)
                 .done(function(response) {
                     console.log("Stop sent");
-                    self.running = false;
+                    self.running(false);
                 })
                 .fail(function() {
                     console.error("Stop failed");

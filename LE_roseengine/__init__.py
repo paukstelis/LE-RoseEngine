@@ -79,6 +79,12 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
 
         self.ellipse = None
 
+        #coordinate tracking
+        self.current_a = None
+        self.current_b = None
+        self.current_x = None
+        self.current_z = None
+
     def initialize(self):
         self.datafolder = self.get_plugin_data_folder()
         self._event_bus.subscribe("LATHEENGRAVER_SEND_POSITION", self.get_position)
@@ -142,6 +148,7 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
         self.current_x = payload["x"]
         self.current_z = payload["z"]
         self.current_a = payload["a"]
+        self.current_b = payload["b"]
         self.buffer = payload["bf"]
         self.state = payload["state"]
         #self._logger.info(payload["state"])
@@ -372,13 +379,26 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
         else:
             rosette["special"] = False
 
-        self._logger.info(f"radii length:{len(radii)}")
-        self._logger.info(f"angle length:{len(angles)}")
+        self._logger.debug(f"radii length:{len(radii)}")
+        self._logger.debug(f"angle length:{len(angles)}")
         self._logger.debug(rosette)
         return rosette
 
     def _job_thread(self):  
         self._logger.info("Starting job thread")
+        #phase offsets applied here to the working array
+        phasecmds = []
+        pump_rad_start = 0
+        if self.pump_offset:
+            #base the roll on self.a_inc
+            roll = int(self.pump_offset/self.a_inc)
+            #determine absolute value at this position from main
+            zero_pump = self.pump_main["radii"][0]
+            pump_rad_start = zero_pump - self.pump_main["radii"][roll]
+            self._logger.debug(f"pump phase offset X value: {pump_rad_start}")
+            self.working[:, 1] = np.roll(self.working[:, 1], roll)
+            phasecmds.append(f"G0 G91 X{pump_rad_start:0.3f}")
+
         try:
             bf_target = self.bf_target
             dir = "" if self.forward else "-"
@@ -390,6 +410,8 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
             cmdlist = []
             cmdlist.append("G92 A0")
             cmdlist.append("M3 S1000")
+            if len(phasecmds):
+                cmdlist.extend(phasecmds)
             while self.running:
                 #A-axis reset
                 #cmdlist.append("G92 A0")
@@ -433,7 +455,9 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
                         if self.ellipse:
                             z = z + mod
                         current_angle = current_angle + self.a_inc
+
                         cmdlist.append(f"G93 G91 G1 A{dir}{self.a_inc} X{x:0.3f} Z{z:0.3f} F{feed:0.1f}")
+                    #All modifications should be PRE injection
                     if self.inject:
                         cmdlist[-1] = self._update_injection(cmdlist[-1], self.inject)
                         self.inject = None
@@ -476,12 +500,6 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
             #Other modifictions
             if self.pump_invert:
                 self.pump_work = np.array(self.pump_work)*-1
-            if self.pump_offset:
-                #base the roll on self.a_inc
-                roll = int(self.pump_offset/self.a_inc)
-                self.pump_work = np.roll(self.pump_work, roll)
-                #amp_offset = self.pump_work[0]
-                #self.pump_work = self.pump_work - amp_offset
         if self.ellipse:
             e_vals = []
             for deg in np.arange(0, 360, self.a_inc):
@@ -492,6 +510,7 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
             mod_array = np.roll(e_a, -1) - e_a
     
         self.working = list(zip_longest(self.rock_work, self.pump_work, mod_array, fillvalue=0))
+        self.working = np.array(self.working)
         self.start_coords["x"] = self.current_x
         self.start_coords["z"] = self.current_z
         self.start_coords["a"] = 0.0
