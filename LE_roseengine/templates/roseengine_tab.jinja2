@@ -102,6 +102,21 @@
 
             <div>
                 <details>
+                    <summary>Fixed Plane</summary>
+                    <div>
+                        <label for="b_adjust" title="Modifies X and Z coordinates based on current B-axis angle">Use fixed plane based on B-angle:
+                        <input id="b_adjust" type="checkbox" data-bind="checked: b_adjust">
+                        </label>
+                    </div>
+                    <div>
+                        <label for="bref" title="Reference B-angle for your cut. See special notes." >B-ref. for this frame:</label>
+                        <input id="bref" type="number" step="any" data-bind="value: bref">
+                    </div>                       
+                </details>
+            </div>
+
+            <div>
+                <details>
                     <summary>Ellipitical Chuck</summary>
                     <div>
                         <label for="e_rad" title="Major radius of ellipse for calculation purposes. All shift values will be relative to this." >Nominal radius (mm):</label>

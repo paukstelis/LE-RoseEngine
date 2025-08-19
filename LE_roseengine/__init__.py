@@ -53,6 +53,9 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
         self.buffer_received = True
         #self.modifiers = {"amp": 1, "phase": 0, "forward": True}
 
+        self.b_adjust = False
+        self.bref = 0.0
+
         self.jobThread = None
         self.buffer = None
         self.feedcontrol =  {"current": 0, "next": 0}
@@ -456,6 +459,14 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
                             z = z + mod
                         current_angle = current_angle + self.a_inc
 
+                        if self.b_adjust:
+                            #self._logger.info(f"initial x, z: {x} {z}")
+                            #initial test assume reference frame at -90 
+                            bangle = math.radians(self.current_b - self.bref) *-1
+                            x = x*math.cos(bangle) + z*math.sin(bangle)
+                            z = -z*math.sin(bangle) + z*math.cos(bangle)
+                            #self._logger.info(f"modified x, z: {x} {z}")
+
                         cmdlist.append(f"G93 G91 G1 A{dir}{self.a_inc} X{x:0.3f} Z{z:0.3f} F{feed:0.1f}")
                     #All modifications should be PRE injection
                     if self.inject:
@@ -631,6 +642,8 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
             self.forward = bool(data["forward"])
             self.pump_invert = bool(data["pump_invert"])
             self.pump_offset = float(data["pump_offset"])
+            self.b_adjust = bool(data["b_adjust"])
+            self.bref = float(data["bref"])
             self._logger.info("ready to start job")
             if float(data["e_ratio"]) > 1.0:
                 rad = float(data["e_rad"])

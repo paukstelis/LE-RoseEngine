@@ -38,6 +38,8 @@ $(function() {
         self.wave_type = ko.observable(null);
         self.e_rad = ko.observable(10.0);
         self.e_ratio = ko.observable(1.0);
+        self.b_adjust = ko.observable(0);
+        self.bref = ko.observable(-90.0);
 
 
 
@@ -424,6 +426,8 @@ $(function() {
                 pump_invert: self.pump_invert(),
                 e_rad: self.e_rad(),
                 e_ratio: self.e_ratio(),
+                b_adjust: self.b_adjust(),
+                bref: self.bref(),
 
             };
 
