@@ -23,6 +23,7 @@ import threading
 import logging
 import numpy as np
 import math
+import shutil
 from svgpathtools import *
 from itertools import zip_longest
 class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
@@ -100,10 +101,21 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
         self.auto_reset = bool(self._settings.get(["auto_reset"]))
 
         storage = self._file_manager._storage("local")
+        
         if storage.folder_exists("rosette"):
             self._logger.info("rosette folder exists")
         else:
             storage.add_folder("rosette")
+            templates_folder = os.path.join(self._settings.getBaseFolder("uploads"), "rosette")
+            source_folder = os.path.join(self._basefolder, "static", "rosette")
+            if os.path.exists(source_folder):
+                for file_name in os.listdir(source_folder):
+                    if file_name.endswith(".svg"):
+                        source_file = os.path.join(source_folder, file_name)
+                        destination_file = os.path.join(templates_folder, file_name)
+                        shutil.copy(source_file, destination_file)
+                        self._logger.info(f"Copied {file_name} to rosette folder")
+
 
 
     def get_settings_defaults(self):
