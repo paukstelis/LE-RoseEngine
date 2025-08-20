@@ -102,6 +102,21 @@
 
             <div>
                 <details>
+                    <summary>Fixed Plane</summary>
+                    <div>
+                        <label style="display: block;" for="b_adjust" title="Modifies X and Z coordinates based on current B-axis angle">Use fixed plane based on B-angle:
+                        <input style="vertical-align:middle; position: relative; bottom: 1px;" id="b_adjust" type="checkbox" data-bind="checked: b_adjust">
+                        </label>
+                    </div>
+                    <div>
+                        <label for="bref" title="Reference B-angle for your cut. See special notes." >B-ref. for this frame:</label>
+                        <input id="bref" type="number" step="any" data-bind="value: bref">
+                    </div>                       
+                </details>
+            </div>
+
+            <div>
+                <details>
                     <summary>Ellipitical Chuck</summary>
                     <div>
                         <label for="e_rad" title="Major radius of ellipse for calculation purposes. All shift values will be relative to this." >Nominal radius (mm):</label>
@@ -116,22 +131,22 @@
 
             <div style="padding: 10px 0px 0px 0px;">
                 <button id="start_job_button" class="btn btn-primary" data-bind="enable: is_operational() && available(), click: startjob">Start</button>
-                <button id="stop_job_button" class="btn btn-primary" data-bind="click: stopjob">Stop</button>
-                <button id="gotostart_button" class="btn btn-primary" data-bind="click: gotostart">Reset</button>
+                <button id="stop_job_button" class="btn btn-primary" data-bind="enable: is_operational() && available(),click: stopjob">Stop</button>
+                <button id="gotostart_button" class="btn btn-primary" data-bind="enable: is_operational() && available(),click: gotostart">Reset</button>
             </div>
             <!-- Recording controls -->
             
             <div id="reccontrols" style="padding: 10px 5px 0px 0px;">
                 <label for="recontrols">Recording Controls</label>
-                <button id="recpause" title="Start/Pause Recording" class="btn box" style="border: 1px solid; width: 40px; height: 40px;" data-bind="click: function() {record('start')}">
+                <button id="recpause" title="Start/Pause Recording" class="btn box" style="border: 1px solid; width: 40px; height: 40px;" data-bind="enable: is_operational() && available(),click: function() {record('start')}">
                 <i class="fa fa-play"></i>
                 </button>
 
-                <button id="stoprec" title="Terminate recording and write file" class="btn box" style="border: 1px solid; width: 40px; height: 40px;" data-bind="click: function() {record('stop')}">
+                <button id="stoprec" title="Terminate recording and write file" class="btn box" style="border: 1px solid; width: 40px; height: 40px;" data-bind="enable: is_operational() && available(),click: function() {record('stop')}">
                 <i class="fa fa-save"></i>
                 </button>
 
-                <button id="deleterec" title="Trash current recording" class="btn box" style="border: 1px solid; width: 40px; height: 40px;" data-bind="click: function() {record('trash')}">
+                <button id="deleterec" title="Trash current recording" class="btn box" style="border: 1px solid; width: 40px; height: 40px;" data-bind="enable: is_operational() && available(),click: function() {record('trash')}">
                 <i class="fa fa-trash"></i>
                 </button>           
             </div>
@@ -158,7 +173,7 @@
                             <i class="fa fa-arrow-up"></i>
                         </button>
 
-                        <button id="ctrl-zdown" class="btn box" style="border: 1px solid; width: 40px; height: 40px;" data-bind="enable: available(), click: function() {re_jog('down')}">
+                        <button id="ctrl-zdown" class="btn box" style="border: 1px solid; width: 40px; height: 40px;" data-bind="enable: is_operational() && available(), click: function() {re_jog('down')}">
                             <i class="fa fa-arrow-up"></i>
                         </button>
 
