@@ -9,10 +9,6 @@
     margin: 3px;
 }
 
-.row-fluid {
-    display: flex;
-    align-items: stretch;
-}
 #rock_area, #pump_area {
     flex: 1;
 }
