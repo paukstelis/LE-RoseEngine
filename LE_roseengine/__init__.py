@@ -116,8 +116,6 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
                         shutil.copy(source_file, destination_file)
                         self._logger.info(f"Copied {file_name} to rosette folder")
 
-
-
     def get_settings_defaults(self):
         return dict(
             a_inc=0.5,
@@ -270,7 +268,7 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
             else:
                 # Append at end if F not found
                 cmd += ' ' + insert_str.strip()
-        self._logger.info(f"injected, orig: {orig_cmd}, new: {cmd}")
+        self._logger.debug(f"injected, orig: {orig_cmd}, new: {cmd}")
         return cmd
 
     def resample_path_to_polar(self, path, center=None):
@@ -657,6 +655,12 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
             self.b_adjust = bool(data["b_adjust"])
             self.bref = float(data["bref"])
             self._logger.info("ready to start job")
+            #reciprocation
+            self.reciprocate = bool(data["reciprocate"])
+            self.rec_dir = int(data["rec_dir"])
+            self.rec_length = float(data["rec_length"])
+            self.rec_adjust = bool(data["rec_adjust"])
+
             if float(data["e_ratio"]) > 1.0:
                 rad = float(data["e_rad"])
                 ratio = float(data["e_ratio"])
