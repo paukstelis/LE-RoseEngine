@@ -41,7 +41,8 @@ $(function() {
         self.b_adjust = ko.observable(0);
         self.bref = ko.observable(-90.0);
 
-
+        self.stages = ko.observableArray([]);
+        self.geo_stages = ko.observable(2);
 
         //Recording
         self.recording  = ko.observable(false);
@@ -94,6 +95,19 @@ $(function() {
             //console.log(self.settings);
             self.fetchProfileFiles();
             self.a_inc = self.settings.a_inc();
+            self.geo_stages = self.settings.geo_stages();
+            var numStages = parseInt(self.geo_stages, 10);
+            var stagesArr = [];
+            for (var i = 0; i < numStages; i++) {
+                stagesArr.push({
+                    id: i,
+                    radius: ko.observable(0),
+                    p: ko.observable(1),
+                    q: ko.observable(1),
+                    phase: ko.observable(0)
+                });
+            }
+            self.stages(stagesArr);
             //console.log("binding self.a_inc")
             //console.log(self.a_inc);
             var po = $('#po_span');
@@ -146,6 +160,23 @@ $(function() {
 
         });
 
+        $("#rockarea").on("click", function() {
+            var plotDiv = document.getElementById('rockarea');
+            var plotData = plotDiv.data;
+            var plotLayout = plotDiv.layout;
+
+            var win = window.open("", "LargeRock", "width=1000,height=800");
+            // Wait for the window to be ready
+            win.document.body.innerHTML = '<div id="largeplot" style="width:900px;height:700px;"></div>';
+            // Add the script tag for Plotly
+            var script = win.document.createElement('script');
+            script.src = "/plugin/roseengine/static/js/plotly-latest.min.js";
+            script.onload = function() {
+                win.Plotly.newPlot('largeplot', plotData, plotLayout, {displayModeBar: false});
+            };
+            win.document.head.appendChild(script);
+        });
+
         self.special_warning = function(a,b) {
             var area = b+'area';
             if (a === "off") {
@@ -188,11 +219,11 @@ $(function() {
             }
             
             var trace = {
-                r: radii,
-                theta: theta,
-                mode: 'lines+markers',
-                name: 'Rosette',
                 type: 'scatterpolar',
+                theta: theta,
+                r: radii,
+                mode: 'lines',
+                name: 'Rosette',
                 line: {
                     color: color,
                     width: 2
@@ -223,13 +254,15 @@ $(function() {
                       visible: false,
                       autorange: true,
                       showline: false, // Hides the axis line
-                      zeroline: false
+                      zeroline: false,
+                      type: "linear"
                     },
                     angularaxis: {
                       showline: false, // Hides the axis line
                       zeroline: false,
                       rotation: 180,
-                      direction: "clockwise"
+                      direction: "clockwise",
+                      type: "linear"
                     }
                 },
 
@@ -264,6 +297,13 @@ $(function() {
                     self.special_warning("on","rock");
                 }
                 else { self.special_warning("off","rock"); }
+                
+            }
+
+            if (plugin == 'roseengine' && data.type == 'geo') {
+                console.log(data.graph);
+                var json_data = JSON.stringify(data.graph);
+                Plotly.newPlot('rockarea', data.graph.data, data.graph.layout,{displayModeBar: false});
                 
             }
 
@@ -320,6 +360,26 @@ $(function() {
                 });
 
 
+        };
+
+        self.create_geo = function() {
+            var stages_data = self.stages().map(function(stage) {
+                return {
+                    id: stage.id,
+                    radius: ko.unwrap(stage.radius),
+                    p: ko.unwrap(stage.p),
+                    q: ko.unwrap(stage.q),
+                    phase: ko.unwrap(stage.phase)
+                };
+            });
+            console.log(stages_data);
+            OctoPrint.simpleApiCommand("roseengine", "geometric", { stages: stages_data })
+                .done(function(response) {
+                    console.log("Geometric data sent");
+                })
+                .fail(function() {
+                    console.error("Geometric failed");
+                });
         };
 
         self.re_jog = function(dir) {
