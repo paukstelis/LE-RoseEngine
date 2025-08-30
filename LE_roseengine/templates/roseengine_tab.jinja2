@@ -129,6 +129,27 @@
                 </details>
             </div>
 
+            <div>
+                <details>
+                    <summary>Geometric Chuck</summary>
+                    <!-- ko foreach: stages -->
+                        <div>
+                            <label for="stage-radius-{$index()}" title="">Stage <span data-bind="text: id"></span>:(radius, ratio, phase, offset)</label>
+                            <input class="span3" id="stage-radius-{$index()}" type="number" step="any" data-bind="value: radius">
+                            <input class="span3" id="stage-p-{$index()}" type="number" step="any" data-bind="value: p">
+                            <input class="span3" id="stage-q-{$index()}" type="number" step="any" data-bind="value: q">
+                            <input class="span2" id="stage-phase-{$index()}" type="number" step="any" data-bind="value: phase">
+                        </div>
+                    <!-- /ko -->
+                    <div>
+                        <button id="create_geo" class="btn" data-bind="click: function() {create_geo()}"> Create</button>
+                        <button id="clear_geo" class="btn" data-bind="click: function() {clear_rosette('rock')}"> Clear</button>
+                        
+                    </div>
+                </details>
+            </div>
+
+
             <div style="padding: 10px 0px 0px 0px;">
                 <button id="start_job_button" class="btn btn-primary" data-bind="enable: is_operational() && available(), click: startjob">Start</button>
                 <button id="stop_job_button" class="btn btn-primary" data-bind="enable: is_operational() && available(),click: stopjob">Stop</button>

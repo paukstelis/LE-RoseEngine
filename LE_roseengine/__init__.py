@@ -26,6 +26,7 @@ import math
 import shutil
 from svgpathtools import *
 from itertools import zip_longest
+from . import geometric
 class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
     octoprint.plugin.AssetPlugin,
     octoprint.plugin.StartupPlugin,
@@ -83,6 +84,11 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
 
         self.ellipse = None
 
+        #geometric chuck
+        self.geo = geometric.GeometricChuck()
+        self.geo_radii = None
+        self.geo_angles = None
+        
         #coordinate tracking
         self.current_a = None
         self.current_b = None
@@ -125,6 +131,7 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
             bf_threshold=80,
             ms_threshold=10,
             auto_reset=False,
+            geo_stages=3,
             )
     
     def get_template_configs(self):
@@ -197,8 +204,55 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
         newradii = np.roll(radii, -1) - radii
         newangles = np.roll(angles, -1) - angles
 
-        return newradii
+        return newradii, newangles
     
+    def _geometric(self, data):
+        radii = []
+        angles = []
+        #reset geo
+        self.geo = geometric.GeometricChuck()
+        for stage in data:
+            if stage["radius"] > 0:
+                self.geo.add_stage(radius=stage["radius"],
+                                p=stage["p"],
+                                q=stage["q"],
+                                phase=np.radians(stage["phase"]),
+                                internal=False
+                                )
+                self._logger.debug("Added stage")
+        #leave out "pen" for now
+        self.geo.set_pen(radius=0)
+        periods = self.geo.required_periods()
+        self._logger.debug(f"Periods: {periods}")
+        t, angles, radii = self.geo.generate_polar_path(num_points=6000, t_range=(0, 2*np.pi * periods * 2))
+        self._logger.debug(radii)
+        self._logger.debug(angles)
+        angles = np.unwrap(angles)
+        angles = np.degrees(angles)
+        #calculate min, max
+        max_radius = np.max(radii)
+        min_radius = np.min(radii)
+        max_idx = np.argmax(radii)
+        radii = np.roll(radii, -max_idx)
+        angles = np.roll(angles, -max_idx)
+
+        # Offset angles so first is 0
+        #angle_offset = angles[0]
+        #angles = (angles - angle_offset) % 360
+        if not np.isclose(angles[-1], 360) and not np.isclose(angles[0], angles[-1]):
+            angles = np.append(angles, 360.0)
+            radii = np.append(radii, radii[0])
+            
+        rosette = {
+            "radii": radii,
+            "angles": angles,
+            "max_radius": max_radius,
+            "min_radius": min_radius,
+            "type": "geometric"
+        }
+
+        return rosette
+
     def _parametric_sine(self, data):
         wave = data["wave_type"]
         amplitude = float(data["amp"])
@@ -232,7 +286,8 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
             "radii": radii,
             "angles": angles,
             "max_radius": None,
-            "min_radius": None
+            "min_radius": None,
+            "type": "parametric"
         }
 
         return rosette
@@ -332,6 +387,7 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
         paths, attributes = svg2paths(filename)
         path = paths[0]  # assume single path
         center = None
+        special_case = False
         for a in attributes:
             if a["id"] == "center":
                 center = (float(a["cx"]), float(a["cy"]))
@@ -359,7 +415,7 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
                 angles = angles[::-1]
                 angle_offset = angles[0]
                 angles = (angles - angle_offset) % 360
-
+        
         if (
             len(radii) > 1 and
             np.isclose(radii[0], radii[-1]) and
@@ -367,28 +423,34 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
         ):
             radii = radii[:-1]
             angles = angles[:-1]
-
+        
         max_radius = np.max(radii)
         min_radius = np.min(radii)
         expected_points = int(360 / self.a_inc)
+        uniform_angles = np.arange(0, 360, self.a_inc)
 
-        # Special case handling
-        special_case = False
-        if len(angles) < expected_points:
-            # Interpolate to uniform angles
-            uniform_angles = np.arange(0, 360, self.a_inc)
-            uniform_radii = np.interp(uniform_angles, angles, radii, period=360)
+        if len(angles) < expected_points or True:  # Always interpolate for accuracy
+            # Interpolate radii to uniform angles
+            # Ensure angles are sorted for interpolation
+            sort_idx = np.argsort(angles)
+            sorted_angles = angles[sort_idx]
+            sorted_radii = radii[sort_idx]
+            # Use np.interp, which wraps at 360
+            uniform_radii = np.interp(uniform_angles, sorted_angles, sorted_radii)
             angles = uniform_angles
             radii = uniform_radii
-        elif len(angles) > expected_points:
+
+        if len(angles) > expected_points:
             special_case = True
 
         rosette = {
             "radii": radii,
             "angles": angles,
             "max_radius": max_radius,
-            "min_radius": min_radius
+            "min_radius": min_radius,
+            "type": "svg"
         }
+
         if special_case:
             rosette["special"] = True
         else:
@@ -398,6 +460,85 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
         self._logger.debug(f"angle length:{len(angles)}")
         self._logger.debug(rosette)
         return rosette
+    
+    def _geometric_thread(self):
+        self._logger.info("Starting geometric thread")
+        try:
+            bf_target = self.bf_target
+            dir = "" if self.forward else "-"
+            #this reverses direction, but would also have to reverse list to truly be in reverse
+            degrees_sec = (self.rpm * 360) / 60
+            degrees_chunk = self.chunk * self.a_inc
+            loop_start = None
+            loop_end = None
+            cmdlist = []
+            cmdlist.append("G92 A0")
+            cmdlist.append("M3 S1000")
+            while self.running:
+                self.buffer = 0
+                degrees_sec = (self.rpm * 360) / 60
+                degrees_chunk = self.chunk * self.a_inc
+                time_unit = self.a_inc/degrees_sec * 1000 #ms
+                tms = round(time.time() * 1000)
+                if loop_start:
+                    self._logger.debug(f"loop time ms: {tms - loop_start}")
+                loop_start = tms
+                self.feedcontrol["current"] = tms
+                
+                #first chunk will be full size
+                #next_interval = time_unit*self.chunk
+                next_interval = int(degrees_chunk / degrees_sec * 1000)  # in milliseconds
+                self.feedcontrol["next"] = self.feedcontrol["current"] + next_interval
+                #self._logger.info(f"Next interval at {self.rpm} RPM, {next_interval}, bf_target {bf_target}")
+                current_angle = 0
+                for i in range(0, len(self.geo_radii), self.chunk):
+              
+                    with self.rpm_lock:
+                        if self.updated_rpm > 0:
+                            #self._logger.info("Updating RPM")
+                            self.rpm = self.updated_rpm
+                            self.updated_rpm = 0.0
+                            degrees_sec = (self.rpm * 360) / 60
+                            next_interval = int(degrees_chunk / degrees_sec * 1000)  
+
+                    feed = (360/self.a_inc) * self.rpm
+                    rchunk = self.geo_radii[i:i+self.chunk]
+                    achunk = self.geo_angles[i:i+self.chunk]
+                    #self.buffer = 0
+                    #need to know the actual angle so we know where we are for ellipse
+                    current_angle = i * self.a_inc
+                    for c in range(0, len(rchunk)):
+                        a = achunk[c]
+                        z = rchunk[c]
+                        cmdlist.append(f"G93 G91 G1 A{a:0.3f} Z{z:0.3f} F{feed:0.1f}")
+                    #All modifications should be PRE injection
+                    if self.inject:
+                        cmdlist[-1] = self._update_injection(cmdlist[-1], self.inject)
+                        self.inject = None
+                    # Loop until we are ready to send the next chunk
+                    tms = round(time.time() * 1000)
+                    while self.feedcontrol["next"] - tms > self.ms_threshold or self.buffer < bf_target:
+                            time.sleep(self.ms_threshold/2000)
+                            tms = round(time.time() * 1000)
+                            if not self.running:
+                                break
+
+                    #self._logger.info(f"buffer is now at {self.buffer}")
+                    self._printer.commands(cmdlist)
+                    self.buffer_received = False
+                    #in case RPM has changed
+                    degrees_sec = (self.rpm * 360) / 60
+                    time_unit = self.a_inc/degrees_sec * 1000 #ms
+                    next_interval = int(degrees_chunk / degrees_sec * 1000)
+                    self.feedcontrol["current"] = round(time.time() * 1000)
+                    self.feedcontrol["next"] = self.feedcontrol["current"] + next_interval
+                    cmdlist = []
+                    self.last_position = i
+                    if not self.running:
+                        break
+        except Exception as e:
+            self._logger.error(f"Exception in job thread: {e}", exc_info=True)
+        self._logger.info("Geometric Thread ended")
 
     def _job_thread(self):  
         self._logger.info("Starting job thread")
@@ -509,17 +650,33 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
             self._logger.error(f"Exception in job thread: {e}", exc_info=True)
         self._logger.info("Thread ended")
 
+    def _start_geo(self):
+        #specific for geometric
+        self._logger.debug("Starting geometric job")
+
+        #this works a little different, as we need both radii and angles
+        self.start_coords["x"] = self.current_x
+        self.start_coords["z"] = self.current_z
+        self.start_coords["a"] = 0.0
+        self.running = True
+        self.geo_radii, self.geo_angles = self.create_working_path(self.rock_main, 1)
+        self._logger.debug(self.geo_radii)
+        self._logger.debug(self.geo_angles)
+        self.jobThread = threading.Thread(target=self._geometric_thread).start()
+
     def _start_job(self):
         if self.running:
             return
-        
+        if self.rock_main and self.rock_main["type"] == "geometric":
+            self._start_geo()
+            return
         #additional array, might want to rethink how this works
         modifier = []
         mod_array = np.array(modifier)
         if self.rock_main:
-            self.rock_work = self.create_working_path(self.rock_main, self.r_amp)
+            self.rock_work, _ = self.create_working_path(self.rock_main, self.r_amp)
         if self.pump_main:
-            self.pump_work = self.create_working_path(self.pump_main, self.p_amp)
+            self.pump_work, _ = self.create_working_path(self.pump_main, self.p_amp)
             #Other modifictions
             if self.pump_invert:
                 self.pump_work = np.array(self.pump_work)*-1
@@ -595,6 +752,7 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
             clear=[],
             update_rpm=[],
             parametric=[],
+            geometric=[],
             recording=[],
         )
     
@@ -646,6 +804,70 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
                 self.pump_main = rosette
             self._plugin_manager.send_plugin_message('roseengine', returndata)
             return
+        
+        if command == "geometric":
+            #list of stages
+            import plotly.graph_objects as go
+            self._logger.debug("Got geometric")
+            stage_data = []
+            for stage in data.get("stages", []):
+                # Each stage should contain: p, q, radius, phase, internal
+                stage_dict = {
+                    "p": float(stage.get("p")),
+                    "q": float(stage.get("q")),
+                    "radius": float(stage.get("radius")),
+                    "phase": float(stage.get("phase"))
+                }
+                stage_data.append(stage_dict)
+            self._logger.debug(stage_data)
+            rosette = self._geometric(stage_data)
+            self.rock_main = rosette
+            r = list(self.rock_main["radii"])
+            a = list(self.rock_main["angles"])
+            s=True
+            maxrad = self.rock_main["max_radius"]
+            minrad = self.rock_main["min_radius"]
+            #self._logger.debug(r)
+            #self._logger.debug(a)
+            title=""
+
+            fig = go.Figure()
+            fig.add_trace(go.Scatterpolar(
+                r=r,
+                theta=a,  # plotly expects degrees
+                mode='lines',
+                
+            ))
+
+            fig.update_layout(
+                margin = dict(
+                l=30,
+                r=30,
+                b=10,
+                t=40,
+                pad=4
+                ),
+                polar=dict(
+                    radialaxis=dict(visible=False,showline=False,autorange=True),
+                    angularaxis=dict(rotation=180, direction="clockwise",showline=False)
+                ),
+                showlegend=False,
+                title=dict(
+                    text=f"r max={maxrad:0.1f}<br>r min={minrad:0.1f}",
+                    font=dict(size=12),
+                    xanchor='center',
+                    yanchor='top',
+                    x=0.5,
+                )
+               
+            )
+
+            json_figure = fig.to_plotly_json()
+
+            returndata = dict(type="geo", special=s, graph=json_figure)
+
+            self._plugin_manager.send_plugin_message('roseengine', returndata) 
+
    
         if command == "start_job":
             self.rpm = float(data["rpm"])
@@ -657,7 +879,7 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
             self.b_adjust = bool(data["b_adjust"])
             self.bref = float(data["bref"])
             self._logger.info("ready to start job")
-            if float(data["e_ratio"]) > 1.0:
+            if float(data["e_ratio"]) > 1.0 and not self.geometric:
                 rad = float(data["e_rad"])
                 ratio = float(data["e_ratio"])
                 self.ellipse = {"a" : rad, "ratio" : ratio }
