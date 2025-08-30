@@ -222,7 +222,9 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
                 self._logger.debug("Added stage")
         #leave out "pen" for now
         self.geo.set_pen(radius=0)
-        t, angles, radii = self.geo.generate_polar_path(num_points=2000, t_range=(0, 2*np.pi * 12))
+        periods = self.geo.required_periods()
+        self._logger.debug(f"Periods: {periods}")
+        t, angles, radii = self.geo.generate_polar_path(num_points=6000, t_range=(0, 2*np.pi * periods * 2))
         self._logger.debug(radii)
         self._logger.debug(angles)
         angles = np.unwrap(angles)
@@ -237,7 +239,10 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
         # Offset angles so first is 0
         #angle_offset = angles[0]
         #angles = (angles - angle_offset) % 360
-
+        if not np.isclose(angles[-1], 360) and not np.isclose(angles[0], angles[-1]):
+            angles = np.append(angles, 360.0)
+            radii = np.append(radii, radii[0])
+            
         rosette = {
             "radii": radii,
             "angles": angles,

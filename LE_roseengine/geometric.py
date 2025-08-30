@@ -1,5 +1,6 @@
 import numpy as np
-
+from fractions import Fraction
+import math
 class Stage:
     def __init__(self, radius, p, q, phase=0.0, internal=False, translation=0.0):
         """
@@ -9,8 +10,8 @@ class Stage:
         internal: bool      # True = internal gearing (angle sign flips)
         """
         self.R = float(radius)
-        self.p = int(p)
-        self.q = int(q)
+        self.p = float(p)
+        self.q = float(q)
         self.phase = float(phase)
         self.internal = bool(internal)
         self.translation = float(translation)
@@ -35,13 +36,28 @@ class GeometricChuck:
         theta_i(t) = a_i * t + phase_i_eff
         where a_i = Π_{j=1..i} s_j * (p_j/q_j), s_j = -1 for internal, +1 for external.
         """
+        
         a = []
         acc = 1.0
         for st in self.stages:
+            ratio = Fraction(st.p).limit_denominator(1000) / Fraction(st.q).limit_denominator(1000)
             s = -1.0 if st.internal else 1.0
-            acc *= s * (st.p / st.q)
+            acc *= s * ratio
             a.append(acc)
         return a
+    
+    def required_periods(self):
+        """
+        Find number of 2π cycles needed for a closed curve.
+        Always works since ratios are snapped to Fractions.
+        """
+        if not self.stages:
+            return 1
+        denoms = []
+        for st in self.stages:
+            ratio = Fraction(st.p).limit_denominator(1000) / Fraction(st.q).limit_denominator(1000)
+            denoms.append(ratio.denominator)
+        return math.lcm(*denoms)
 
     def generate_xy(self, num_points=2000, t_range=(0.0, 2*np.pi)):
         if not self.stages:
