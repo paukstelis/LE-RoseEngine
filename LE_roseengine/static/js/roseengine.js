@@ -45,6 +45,7 @@ $(function() {
         self.geo_stages = ko.observable(2);
         self.geo_points = ko.observable(6000);
 
+
         //Recording
         self.recording  = ko.observable(false);
         self.lines = ko.observable(0); //number of lines written/stored
