@@ -88,6 +88,7 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
         self.geo = geometric.GeometricChuck()
         self.geo_radii = None
         self.geo_angles = None
+        self.geo_points = 6000
         
         #coordinate tracking
         self.current_a = None
@@ -105,6 +106,7 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
         self.bf_target = int(self._settings.get(["bf_threshold"]))
         self.ms_threshold = int(self._settings.get(["ms_threshold"]))
         self.auto_reset = bool(self._settings.get(["auto_reset"]))
+        self.geo_points = int(self._settings.get(["geo_points"]))
 
         storage = self._file_manager._storage("local")
         
@@ -132,6 +134,7 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
             ms_threshold=10,
             auto_reset=False,
             geo_stages=3,
+            geo_points=6000,
             )
     
     def get_template_configs(self):
@@ -223,7 +226,7 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
         self.geo.set_pen(radius=0)
         periods = self.geo.required_periods()
         self._logger.debug(f"Periods: {periods}")
-        t, angles, radii = self.geo.generate_polar_path(num_points=6000, t_range=(0, 2*np.pi * periods * 2))
+        t, angles, radii = self.geo.generate_polar_path(num_points=self.geo_points, t_range=(0, 2*np.pi * periods * 2))
         self._logger.debug(radii)
         self._logger.debug(angles)
         angles = np.unwrap(angles)
@@ -677,8 +680,6 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
 
         self.geo_radii = np.array(cleaned_radii)
         self.geo_angles = np.array(cleaned_angles)
-        for each in self.geo_angles:
-            self._logger.debug(each)
         self.jobThread = threading.Thread(target=self._geometric_thread).start()
 
     def _start_job(self):
@@ -836,7 +837,9 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
                     "phase": float(stage.get("phase"))
                 }
                 stage_data.append(stage_dict)
+            self.geo_points = int(data["samples"])
             self._logger.debug(stage_data)
+            self._logger.debug(f"Sample points: {self.geo_points}")
             rosette = self._geometric(stage_data)
             self.rock_main = rosette
             r = list(self.rock_main["radii"])
