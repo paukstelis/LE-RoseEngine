@@ -88,6 +88,8 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
         self.geo = geometric.GeometricChuck()
         self.geo_radii = None
         self.geo_angles = None
+        self.geo_points = 6000
+
         
         #coordinate tracking
         self.current_a = None
@@ -105,6 +107,7 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
         self.bf_target = int(self._settings.get(["bf_threshold"]))
         self.ms_threshold = int(self._settings.get(["ms_threshold"]))
         self.auto_reset = bool(self._settings.get(["auto_reset"]))
+        self.geo_points = int(self._settings.get(["geo_points"]))
 
         storage = self._file_manager._storage("local")
         
@@ -132,6 +135,8 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
             ms_threshold=10,
             auto_reset=False,
             geo_stages=3,
+            geo_points=6000,
+
             )
     
     def get_template_configs(self):
@@ -198,7 +203,6 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
         radii = np.array(rl)
         angles = np.array(an)
 
-        #first apply any amplitude modifiers
         radii = np.array(radii) * amp
         #generate differences
         newradii = np.roll(radii, -1) - radii
@@ -224,7 +228,8 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
         self.geo.set_pen(radius=0)
         periods = self.geo.required_periods()
         self._logger.debug(f"Periods: {periods}")
-        t, angles, radii = self.geo.generate_polar_path(num_points=6000, t_range=(0, 2*np.pi * periods * 2))
+        t, angles, radii = self.geo.generate_polar_path(num_points=self.geo_points, t_range=(0, 2*np.pi * periods * 2))
+
         self._logger.debug(radii)
         self._logger.debug(angles)
         angles = np.unwrap(angles)
@@ -239,9 +244,10 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
         # Offset angles so first is 0
         #angle_offset = angles[0]
         #angles = (angles - angle_offset) % 360
-        if not np.isclose(angles[-1], 360) and not np.isclose(angles[0], angles[-1]):
-            angles = np.append(angles, 360.0)
-            radii = np.append(radii, radii[0])
+
+        #if not np.isclose(angles[-1], 360) and not np.isclose(angles[0], angles[-1]):
+        #    angles = np.append(angles, 360.0)
+        #    radii = np.append(radii, radii[0])
             
         rosette = {
             "radii": radii,
@@ -336,7 +342,6 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
         else:
             cx = center[0]
             cy = center[1]
-        polar_points = []
         radii = []
         angles = []
         N_STEPS = 10000
@@ -353,7 +358,6 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
 
             if last_angle is None:
                 # First point
-                #polar_points.append((radius, 0.0))
                 radii.append(radius)
                 angles.append(0.0)
                 last_angle = angle
@@ -374,11 +378,9 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
                 angle_diff -= 360
 
             if abs(angle_diff) >= ANGLE_STEP:
-                #polar_points.append((radius, rel_angle))
                 radii.append(radius)
                 angles.append(rel_angle)
                 last_angle = angle
-
         return angles, radii
 
     def load_rosette(self, filepath):
@@ -405,6 +407,7 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
 
         # Offset angles so first is 0
         angle_offset = angles[0]
+        self._logger.debug(f"First angle is: {angles[0]}")
         angles = (angles - angle_offset) % 360
 
         # Detect if the path is going in reverse (large jump between first and second angle)
@@ -426,10 +429,12 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
         
         max_radius = np.max(radii)
         min_radius = np.min(radii)
+        self._logger.debug(f"First/last radii/angle: {radii[0]} {angles[0]} {radii[-1]} {angles[-1]}")
         expected_points = int(360 / self.a_inc)
         uniform_angles = np.arange(0, 360, self.a_inc)
 
-        if len(angles) < expected_points or True:  # Always interpolate for accuracy
+        if len(angles) < expected_points:
+            self._logger.debug("Running interpolation...")
             # Interpolate radii to uniform angles
             # Ensure angles are sorted for interpolation
             sort_idx = np.argsort(angles)
@@ -480,9 +485,6 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
                 degrees_chunk = self.chunk * self.a_inc
                 time_unit = self.a_inc/degrees_sec * 1000 #ms
                 tms = round(time.time() * 1000)
-                if loop_start:
-                    self._logger.debug(f"loop time ms: {tms - loop_start}")
-                loop_start = tms
                 self.feedcontrol["current"] = tms
                 
                 #first chunk will be full size
@@ -506,11 +508,18 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
                     achunk = self.geo_angles[i:i+self.chunk]
                     #self.buffer = 0
                     #need to know the actual angle so we know where we are for ellipse
-                    current_angle = i * self.a_inc
                     for c in range(0, len(rchunk)):
                         a = achunk[c]
                         z = rchunk[c]
-                        cmdlist.append(f"G93 G91 G1 A{a:0.3f} Z{z:0.3f} F{feed:0.1f}")
+                        x = 0
+                        if self.b_adjust:
+                            #self._logger.info(f"initial x, z: {x} {z}")
+                            #initial test assume reference frame at -90 
+                            bangle = math.radians(self.current_b - self.bref) *-1
+                            x = x*math.cos(bangle) + z*math.sin(bangle)
+                            z = -z*math.sin(bangle) + z*math.cos(bangle)
+                            #self._logger.info(f"modified x, z: {x} {z}")
+                        cmdlist.append(f"G93 G91 G1 X{x:0.3f} A{a:0.3f} Z{z:0.3f} F{feed:0.1f}")
                     #All modifications should be PRE injection
                     if self.inject:
                         cmdlist[-1] = self._update_injection(cmdlist[-1], self.inject)
@@ -660,8 +669,21 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
         self.start_coords["a"] = 0.0
         self.running = True
         self.geo_radii, self.geo_angles = self.create_working_path(self.rock_main, 1)
-        self._logger.debug(self.geo_radii)
-        self._logger.debug(self.geo_angles)
+        # Remove large negative/positive jumps at the end of geo_angles
+        cleaned_radii = []
+        cleaned_angles = []
+        for i in range(len(self.geo_angles)):
+            # Check difference to next angle (wrap at end)
+            if i < len(self.geo_angles) - 1:
+                diff = self.geo_angles[i+1] - self.geo_angles[i]
+                if abs(diff) > 180:
+                    # Stop before the large jump
+                    break
+            cleaned_radii.append(self.geo_radii[i])
+            cleaned_angles.append(self.geo_angles[i])
+
+        self.geo_radii = np.array(cleaned_radii)
+        self.geo_angles = np.array(cleaned_angles)
         self.jobThread = threading.Thread(target=self._geometric_thread).start()
 
     def _start_job(self):
@@ -819,7 +841,10 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
                     "phase": float(stage.get("phase"))
                 }
                 stage_data.append(stage_dict)
+            self.geo_points = int(data["samples"])
             self._logger.debug(stage_data)
+            self._logger.debug(f"Sample points: {self.geo_points}")
+
             rosette = self._geometric(stage_data)
             self.rock_main = rosette
             r = list(self.rock_main["radii"])

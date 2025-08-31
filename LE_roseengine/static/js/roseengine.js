@@ -43,6 +43,8 @@ $(function() {
 
         self.stages = ko.observableArray([]);
         self.geo_stages = ko.observable(2);
+        self.geo_points = ko.observable(6000);
+
 
         //Recording
         self.recording  = ko.observable(false);
@@ -96,6 +98,7 @@ $(function() {
             self.fetchProfileFiles();
             self.a_inc = self.settings.a_inc();
             self.geo_stages = self.settings.geo_stages();
+            self.geo_points = self.settings.geo_points();
             var numStages = parseInt(self.geo_stages, 10);
             var stagesArr = [];
             for (var i = 0; i < numStages; i++) {
@@ -222,7 +225,7 @@ $(function() {
                 type: 'scatterpolar',
                 theta: theta,
                 r: radii,
-                mode: 'lines',
+                mode: 'lines+markers',
                 name: 'Rosette',
                 line: {
                     color: color,
@@ -373,7 +376,7 @@ $(function() {
                 };
             });
             console.log(stages_data);
-            OctoPrint.simpleApiCommand("roseengine", "geometric", { stages: stages_data })
+            OctoPrint.simpleApiCommand("roseengine", "geometric", { stages: stages_data, samples: self.geo_points })
                 .done(function(response) {
                     console.log("Geometric data sent");
                 })
@@ -488,6 +491,7 @@ $(function() {
                 e_ratio: self.e_ratio(),
                 b_adjust: self.b_adjust(),
                 bref: self.bref(),
+               
 
             };
 
