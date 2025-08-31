@@ -222,7 +222,7 @@ $(function() {
                 type: 'scatterpolar',
                 theta: theta,
                 r: radii,
-                mode: 'lines',
+                mode: 'lines+markers',
                 name: 'Rosette',
                 line: {
                     color: color,
