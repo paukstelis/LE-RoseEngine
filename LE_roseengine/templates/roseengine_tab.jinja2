@@ -146,9 +146,9 @@
                         <input class="span4" id="geo_points" type="number" min="50" step="any" data-bind="value: geo_points">
                     </div>
                     <div>
-                        <button id="create_geo" class="btn" data-bind="click: function() {create_geo()}"> Create</button>
+                        <button id="create_geo" class="btn" data-bind="click: function() {create_geo(false)}"> Create</button>
                         <button id="clear_geo" class="btn" data-bind="click: function() {clear_rosette('rock')}"> Clear</button>
-                        
+                        <button id="geo_random" class="btn" data-bind="click: function() {create_geo(true)}">Random</button>
                     </div>
                 </details>
             </div>

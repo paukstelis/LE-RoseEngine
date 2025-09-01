@@ -365,16 +365,37 @@ $(function() {
 
         };
 
-        self.create_geo = function() {
-            var stages_data = self.stages().map(function(stage) {
-                return {
-                    id: stage.id,
-                    radius: ko.unwrap(stage.radius),
-                    p: ko.unwrap(stage.p),
-                    q: ko.unwrap(stage.q),
-                    phase: ko.unwrap(stage.phase)
-                };
-            });
+        self.create_geo = function(randomize) {
+            var stages_data = self.stages().map(function(stage, idx) {
+                if (randomize) {
+                    var radius = Math.floor(Math.random() * 100) + 1;
+                    var p = (idx === 0) ? 1 : Math.floor(Math.random() * 40) + 1;
+                    var q = (idx === 0) ? 1 : Math.floor(Math.random() * 40) + 1;
+                    var phase = Math.floor(Math.random() * 360);
+
+                    // Update the knockout observables so UI reflects the random values
+                    stage.radius(radius);
+                    stage.p(p);
+                    stage.q(q);
+                    stage.phase(phase);
+
+                    return {
+                        id: stage.id,
+                        radius: radius,
+                        p: p,
+                        q: q,
+                        phase: phase
+                    };
+                } else {
+                    return {
+                        id: stage.id,
+                        radius: ko.unwrap(stage.radius),
+                        p: ko.unwrap(stage.p),
+                        q: ko.unwrap(stage.q),
+                        phase: ko.unwrap(stage.phase)
+                    };
+                }
+        });
             console.log(stages_data);
             OctoPrint.simpleApiCommand("roseengine", "geometric", { stages: stages_data, samples: self.geo_points })
                 .done(function(response) {

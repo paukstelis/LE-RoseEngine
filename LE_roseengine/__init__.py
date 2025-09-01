@@ -228,7 +228,7 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
         self.geo.set_pen(radius=0)
         periods = self.geo.required_periods()
         self._logger.debug(f"Periods: {periods}")
-        t, angles, radii = self.geo.generate_polar_path(num_points=self.geo_points, t_range=(0, 2*np.pi * periods * 2))
+        t, angles, radii = self.geo.generate_polar_path(num_points=self.geo_points, t_range=(0, 4*np.pi * periods * 2))
 
         self._logger.debug(radii)
         self._logger.debug(angles)
@@ -468,6 +468,9 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
     
     def _geometric_thread(self):
         self._logger.info("Starting geometric thread")
+        #get avg. angular change for feed calc
+        avg_a_inc = np.mean(np.abs(self.geo_angles))
+        self._logger.debug(f"Average angular displacement: {avg_a_inc}")
         try:
             bf_target = self.bf_target
             dir = "" if self.forward else "-"
@@ -482,8 +485,8 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
             while self.running:
                 self.buffer = 0
                 degrees_sec = (self.rpm * 360) / 60
-                degrees_chunk = self.chunk * self.a_inc
-                time_unit = self.a_inc/degrees_sec * 1000 #ms
+                degrees_chunk = self.chunk * avg_a_inc
+                time_unit = avg_a_inc/degrees_sec * 1000 #ms
                 tms = round(time.time() * 1000)
                 self.feedcontrol["current"] = tms
                 
@@ -503,7 +506,7 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
                             degrees_sec = (self.rpm * 360) / 60
                             next_interval = int(degrees_chunk / degrees_sec * 1000)  
 
-                    feed = (360/self.a_inc) * self.rpm
+                    feed = (360/avg_a_inc) * self.rpm
                     rchunk = self.geo_radii[i:i+self.chunk]
                     achunk = self.geo_angles[i:i+self.chunk]
                     #self.buffer = 0
@@ -513,12 +516,9 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
                         z = rchunk[c]
                         x = 0
                         if self.b_adjust:
-                            #self._logger.info(f"initial x, z: {x} {z}")
-                            #initial test assume reference frame at -90 
                             bangle = math.radians(self.current_b - self.bref) *-1
                             x = x*math.cos(bangle) + z*math.sin(bangle)
                             z = -z*math.sin(bangle) + z*math.cos(bangle)
-                            #self._logger.info(f"modified x, z: {x} {z}")
                         cmdlist.append(f"G93 G91 G1 X{x:0.3f} A{a:0.3f} Z{z:0.3f} F{feed:0.1f}")
                     #All modifications should be PRE injection
                     if self.inject:
@@ -537,12 +537,10 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
                     self.buffer_received = False
                     #in case RPM has changed
                     degrees_sec = (self.rpm * 360) / 60
-                    time_unit = self.a_inc/degrees_sec * 1000 #ms
                     next_interval = int(degrees_chunk / degrees_sec * 1000)
                     self.feedcontrol["current"] = round(time.time() * 1000)
                     self.feedcontrol["next"] = self.feedcontrol["current"] + next_interval
                     cmdlist = []
-                    self.last_position = i
                     if not self.running:
                         break
         except Exception as e:
