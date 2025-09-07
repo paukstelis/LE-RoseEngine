@@ -54,7 +54,7 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
         self.buffer = 0
         self.buffer_received = True
         #self.modifiers = {"amp": 1, "phase": 0, "forward": True}
-
+        np.set_printoptions(suppress=True,precision=3)
         self.b_adjust = False
         self.bref = 0.0
 
@@ -89,6 +89,8 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
         self.geo_radii = None
         self.geo_angles = None
         self.geo_points = 6000
+        self.geo_thresh = 500
+        self.geo_interp = 6000
 
         
         #coordinate tracking
@@ -108,6 +110,8 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
         self.ms_threshold = int(self._settings.get(["ms_threshold"]))
         self.auto_reset = bool(self._settings.get(["auto_reset"]))
         self.geo_points = int(self._settings.get(["geo_points"]))
+        self.geo_thresh = int(self._settings.get(["geo_thresh"]))
+        self.geo_interp = int(self._settings.get(["geo_interp"]))
 
         storage = self._file_manager._storage("local")
         
@@ -136,6 +140,8 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
             auto_reset=False,
             geo_stages=3,
             geo_points=6000,
+            geo_thresh=500,
+            geo_interp=6000,
 
             )
     
@@ -227,25 +233,29 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
         #leave out "pen" for now
         self.geo.set_pen(radius=0)
         periods = self.geo.required_periods()
+        #if periods > 30:
+        #    periods  = 30
         self._logger.debug(f"Periods: {periods}")
-        t, angles, radii = self.geo.generate_polar_path(num_points=self.geo_points, t_range=(0, 4*np.pi * periods * 2))
+        t, angles, radii = self.geo.generate_polar_path(num_points=self.geo_points, t_range=(0, 2*np.pi * periods))
 
-        self._logger.debug(radii)
-        self._logger.debug(angles)
         angles = np.unwrap(angles)
         angles = np.degrees(angles)
+        
         #calculate min, max
         max_radius = np.max(radii)
         min_radius = np.min(radii)
         max_idx = np.argmax(radii)
         radii = np.roll(radii, -max_idx)
         angles = np.roll(angles, -max_idx)
-
+        self._logger.debug(radii)
+        self._logger.debug(angles)
+        #radii = radii[:-1]
+        #angles = angles[:-1]
         # Offset angles so first is 0
         #angle_offset = angles[0]
         #angles = (angles - angle_offset) % 360
 
-        #if not np.isclose(angles[-1], 360) and not np.isclose(angles[0], angles[-1]):
+        #if not np.isclose(angles[-1], 360):
         #    angles = np.append(angles, 360.0)
         #    radii = np.append(radii, radii[0])
             
@@ -489,7 +499,7 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
                 time_unit = avg_a_inc/degrees_sec * 1000 #ms
                 tms = round(time.time() * 1000)
                 self.feedcontrol["current"] = tms
-                
+                self._logger.debug("AT THE START")
                 #first chunk will be full size
                 #next_interval = time_unit*self.chunk
                 next_interval = int(degrees_chunk / degrees_sec * 1000)  # in milliseconds
@@ -658,30 +668,62 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
         self._logger.info("Thread ended")
 
     def _start_geo(self):
-        #specific for geometric
         self._logger.debug("Starting geometric job")
-
-        #this works a little different, as we need both radii and angles
         self.start_coords["x"] = self.current_x
         self.start_coords["z"] = self.current_z
         self.start_coords["a"] = 0.0
         self.running = True
-        self.geo_radii, self.geo_angles = self.create_working_path(self.rock_main, 1)
-        # Remove large negative/positive jumps at the end of geo_angles
-        cleaned_radii = []
-        cleaned_angles = []
-        for i in range(len(self.geo_angles)):
-            # Check difference to next angle (wrap at end)
-            if i < len(self.geo_angles) - 1:
-                diff = self.geo_angles[i+1] - self.geo_angles[i]
-                if abs(diff) > 180:
-                    # Stop before the large jump
-                    break
-            cleaned_radii.append(self.geo_radii[i])
-            cleaned_angles.append(self.geo_angles[i])
 
-        self.geo_radii = np.array(cleaned_radii)
-        self.geo_angles = np.array(cleaned_angles)
+        radii = np.array(self.rock_main["radii"])
+        angles = np.array(self.rock_main["angles"])
+        num_points = len(radii)
+        num_samples = self.geo_interp
+
+        if num_points < self.geo_thresh:
+            # Convert polar to Cartesian
+            x = radii * np.cos(np.radians(angles))
+            y = radii * np.sin(np.radians(angles))
+
+            # Parameterize by cumulative path length
+            ds = np.sqrt(np.diff(x)**2 + np.diff(y)**2)
+            s = np.concatenate(([0], np.cumsum(ds)))
+
+            # Interpolate to 6000 points along the path
+            s_uniform = np.linspace(0, s[-1], num_samples)
+            x_new = np.interp(s_uniform, s, x)
+            y_new = np.interp(s_uniform, s, y)
+
+            # Convert back to polar
+            new_radii = np.sqrt(x_new**2 + y_new**2)
+            new_angles = np.degrees(np.unwrap(np.arctan2(y_new, x_new)))
+        else:
+            new_radii = radii
+            new_angles = angles
+
+        #remove last value here
+        new_radii = new_radii[:-1]
+        new_angles = new_angles[:-1]
+        # Calculate differences
+        radius_diffs = np.diff(new_radii)
+        angle_diffs = np.diff(new_angles)
+        if len(angle_diffs) < 1000:
+            for each in angle_diffs:
+                self._logger.debug(each)
+
+        # Append wrap-around difference
+        radius_diffs = np.append(radius_diffs, new_radii[0] - new_radii[-1])
+        #handles if we are travelling in the negative direction
+        wrap_diff = new_angles[0] - new_angles[-1]
+        wrap_diff = (wrap_diff + 180) % 360 - 180
+        angle_diffs = np.append(angle_diffs, wrap_diff)
+        #angle_diffs = np.append(angle_diffs, (new_angles[0] - new_angles[-1]) % 360 )
+
+        self.geo_radii = radius_diffs
+        self.geo_angles = angle_diffs
+
+        self._logger.debug("Geo radii diffs: %s", self.geo_radii)
+        self._logger.debug("Geo angle diffs: %s", self.geo_angles)
+
         self.jobThread = threading.Thread(target=self._geometric_thread).start()
 
     def _start_job(self):
@@ -902,7 +944,7 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
             self.b_adjust = bool(data["b_adjust"])
             self.bref = float(data["bref"])
             self._logger.info("ready to start job")
-            if float(data["e_ratio"]) > 1.0 and not self.geometric:
+            if float(data["e_ratio"]) > 1.0 and not self.rock_main["type"] == "geometric":
                 rad = float(data["e_rad"])
                 ratio = float(data["e_ratio"])
                 self.ellipse = {"a" : rad, "ratio" : ratio }

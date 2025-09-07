@@ -32,5 +32,13 @@
             <input type="number" step="1" min="50" max="20000" class="input-mini" data-bind="numeric, value: settings.plugins.roseengine.geo_points"> Default sampling points
             <i class="icon icon-info-sign" title="" data-toggle="tooltip"></i>
         </label>
+        <label>
+            <input type="number" step="1" min="10" max="10000" class="input-mini" data-bind="numeric, value: settings.plugins.roseengine.geo_thresh"> Interpolation point threshold
+            <i class="icon icon-info-sign" title="" data-toggle="tooltip"></i>
+        </label>
+        <label>
+            <input type="number" step="1" min="50" max="20000" class="input-mini" data-bind="numeric, value: settings.plugins.roseengine.geo_interp"> Interpolation resampling points
+            <i class="icon icon-info-sign" title="" data-toggle="tooltip"></i>
+        </label>
     </div>
 </form>

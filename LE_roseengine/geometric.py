@@ -90,5 +90,5 @@ class GeometricChuck:
         """
         t, x, y = self.generate_xy(num_points=num_points, t_range=t_range)
         r   = np.hypot(x, y)
-        phi = np.arctan2(y, x)
+        phi = np.unwrap(np.arctan2(y, x))
         return t, phi, r
