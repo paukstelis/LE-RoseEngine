@@ -23,14 +23,14 @@
                          <div>
                             <label>Wave Function:</label>
                             <select id="wave_type" data-bind="value: wave_type">
-                                <option value="sin">Sine</option>
+                                <option title="Sine Wave" value="sin">Sine</option>
                                 <option value="tri">Triangle</option>
                                 <option value="square">Square</option>
                                 <option value="saw">Sawtooth</option>
                             </select>
                         </div>
                         <div>
-                            <label for="samp">Amplitude (mm):</label>
+                            <label title="Amplitude for one phase. Full shift will be twice this value" for="samp">Amplitude (mm):</label>
                             <input id="s_amp" type="number" value="1" step="any" data-bind="value: s_amp">
                         </div>
                         <div>
@@ -89,7 +89,7 @@
     
         <div id="running" class="span6" style="float: left;">
             <div>
-                    <label title="RPM" data-toggle="tooltip" for="rpm">RPM</label>
+                    <label title="RPM. Can be adjusted on-the-fly." data-toggle="tooltip" for="rpm">RPM</label>
                     <input class="slider" id="rpm" type="range" min="0.25" max="6" step="0.25" data-bind="value: rpm, valueUpdate: 'input'">
                     <br><strong data-bind="text: rpm()"></strong>   
             </div>
@@ -123,7 +123,7 @@
                         <input id="e_rad" type="number" value="1" step="any" data-bind="value: e_rad">
                     </div>
                     <div>
-                        <label for="ratio" title="Ratio of major to minor. Value of 1 will be a circle." >Ratio:</label>
+                        <label for="ratio" title="Ratio of major to minor. Value of 1 will be a circle and are ignored as the default" >Ratio:</label>
                         <input id="ratio" type="number" min="1.0" step="any" data-bind="value: e_ratio">
                     </div>                       
                 </details>
@@ -148,7 +148,7 @@
                     <div>
                         <button id="create_geo" class="btn" data-bind="click: function() {create_geo(false)}"> Create</button>
                         <button id="clear_geo" class="btn" data-bind="click: function() {clear_rosette('rock')}"> Clear</button>
-                        <button id="geo_random" class="btn" data-bind="click: function() {create_geo(true)}">Random</button>
+                        <button title="Input random integer values" id="geo_random" class="btn" data-bind="click: function() {create_geo(true)}">Random</button>
                     </div>
                 </details>
             </div>

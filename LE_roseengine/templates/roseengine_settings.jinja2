@@ -3,21 +3,21 @@
         <h3>Control Options</h3>
         <label>
             <input type="number" step="any" min="0.1" max="60.0" class="input-mini" data-bind="value: settings.plugins.roseengine.a_inc"> Rotation angle increment
-            <i class="icon icon-info-sign" title="" data-toggle="tooltip"></i>
+            <i class="icon icon-info-sign" title="The angular degree increments used to calculate motion path (excluding geometric chuck)" data-toggle="tooltip"></i>
         </label>
         <br>
         <label>
             <input type="number" step="1" min="1" max="60" class="input-mini" data-bind="value: settings.plugins.roseengine.chunk"> Command chunk size
-            <i class="icon icon-info-sign" title="" data-toggle="tooltip"></i>
+            <i class="icon icon-info-sign" title="How many commands are sent at a time. The smaller the angle increment, the higher this value can be." data-toggle="tooltip"></i>
         </label>
         <br>
         <label>
             <input type="number" step="1" min="0" max="95" class="input-mini" data-bind="value: settings.plugins.roseengine.bf_threshold"> Buffer threshold
-            <i class="icon icon-info-sign" title="" data-toggle="tooltip"></i>
+            <i class="icon icon-info-sign" title="The threshold below which commands are delayed to allow some of the queued commands to be sent." data-toggle="tooltip"></i>
         </label>
         <label>
             <input type="number" step="1" min="0" max="200" class="input-mini" data-bind="numeric, value: settings.plugins.roseengine.ms_threshold"> Millisecond threshold
-            <i class="icon icon-info-sign" title="" data-toggle="tooltip"></i>
+            <i class="icon icon-info-sign" title="How close in milliseconds from the calculated time before sending the next command chunk." data-toggle="tooltip"></i>
         </label>
         <label>
             <input type="checkbox" data-bind="checked: settings.plugins.roseengine.auto_reset"> Auto-reset on stop
@@ -26,19 +26,19 @@
         <h3>Geometric Chuck options</h3>
         <label>
             <input type="number" step="1" min="2" max="10" class="input-mini" data-bind="numeric, value: settings.plugins.roseengine.geo_stages"> Geometric chuck stages
-            <i class="icon icon-info-sign" title="" data-toggle="tooltip"></i>
+            <i class="icon icon-info-sign" title="Number of stages. Note: the first stage is always just a drive stage." data-toggle="tooltip"></i>
         </label>
         <label>
             <input type="number" step="1" min="50" max="20000" class="input-mini" data-bind="numeric, value: settings.plugins.roseengine.geo_points"> Default sampling points
-            <i class="icon icon-info-sign" title="" data-toggle="tooltip"></i>
+            <i class="icon icon-info-sign" title="The default number of points that will be used to calculate the complete path." data-toggle="tooltip"></i>
         </label>
         <label>
             <input type="number" step="1" min="10" max="10000" class="input-mini" data-bind="numeric, value: settings.plugins.roseengine.geo_thresh"> Interpolation point threshold
-            <i class="icon icon-info-sign" title="" data-toggle="tooltip"></i>
+            <i class="icon icon-info-sign" title="If the number of sampling points is below this the path will be re-interpolated from existing points." data-toggle="tooltip"></i>
         </label>
         <label>
             <input type="number" step="1" min="50" max="20000" class="input-mini" data-bind="numeric, value: settings.plugins.roseengine.geo_interp"> Interpolation resampling points
-            <i class="icon icon-info-sign" title="" data-toggle="tooltip"></i>
+            <i class="icon icon-info-sign" title="If resampling is done, this number of points will be used for re-interpolation." data-toggle="tooltip"></i>
         </label>
     </div>
 </form>
