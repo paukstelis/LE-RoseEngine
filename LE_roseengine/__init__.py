@@ -688,7 +688,7 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
             ds = np.sqrt(np.diff(x)**2 + np.diff(y)**2)
             s = np.concatenate(([0], np.cumsum(ds)))
 
-            # Interpolate to 6000 points along the path
+            # Interpolate to X points along the path
             s_uniform = np.linspace(0, s[-1], num_samples)
             x_new = np.interp(s_uniform, s, x)
             y_new = np.interp(s_uniform, s, y)
@@ -710,6 +710,14 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
             for each in angle_diffs:
                 self._logger.debug(each)
 
+        large_jumps = np.where(np.abs(angle_diffs) > 90)[0]
+        if large_jumps.size > 0:
+            self._logger.info(f"Large angle diff (>90 deg) at indices: {large_jumps}, values: {angle_diffs[large_jumps]}")
+            msg=dict(title="Design Problem",
+                      text="This design has a large angular jump. This is a known bug. Recreate your design with a fewer number of sample points.",
+                      type="warning")
+            self.send_le_error(msg)
+            return
         # Append wrap-around difference
         radius_diffs = np.append(radius_diffs, new_radii[0] - new_radii[-1])
         #handles if we are travelling in the negative direction
@@ -766,11 +774,18 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
         self._logger.debug(f"current_a: {self.current_a}")
         theA = self.current_a % 360
         gcode.append(f"G92 A{theA}")
+        #TODO: If using B-angle, it is possible that start position X is less than end, need to take into account
         x,z,a = self.start_coords["x"], self.start_coords["z"], self.start_coords["a"]
         if self.rock_main and not self.pump_main:
             #assume we are just going to back and then in/out
-            gcode.append(f"G94 G90 G0 X{x}")
-            gcode.append(f"G90 G0 Z{z} A{a}")
+            if self.b_adjust: #do we need to compensate for the actual B-angle?
+                if self.current_x > x:
+                    gcode.append(f"G94 G91 G1 X5 F1000")
+                    gcode.append(f"G90 G0 Z{z} A{a}")
+                    gcode.append(f"G90 G0 X{x}")
+            else:
+                gcode.append(f"G94 G90 G0 X{x}")
+                gcode.append(f"G90 G0 Z{z} A{a}")
         if self.pump_main and not self.rock_main:
             gcode.append(f"G94 G90 G0 Z{z}")
             gcode.append(f"G0 X{x} A{a}")

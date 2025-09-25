@@ -48,16 +48,18 @@ class GeometricChuck:
     
     def required_periods(self):
         """
-        Find number of 2π cycles needed for a closed curve.
-        Always works since ratios are snapped to Fractions.
+        Find number of 2π cycles needed for a closed curve,
+        accounting for dependent angular frequencies.
         """
         if not self.stages:
             return 1
-        denoms = []
-        for st in self.stages:
-            ratio = Fraction(st.p).limit_denominator(1000) / Fraction(st.q).limit_denominator(1000)
-            denoms.append(ratio.denominator)
-        return math.lcm(*denoms)
+        multipliers = self._angle_multipliers()
+        # Convert to Fractions for accurate LCM calculation
+        fracs = [Fraction(m).limit_denominator(1000) for m in multipliers]
+        denoms = [abs(frac.denominator) for frac in fracs]
+        # Remove duplicates and dependent multiples
+        unique_denoms = set(denoms)
+        return math.lcm(*unique_denoms)
 
     def generate_xy(self, num_points=2000, t_range=(0.0, 2*np.pi)):
         if not self.stages:
