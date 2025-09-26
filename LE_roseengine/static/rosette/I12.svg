@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!-- Created with Inkscape (http://www.inkscape.org/) -->
+
+<svg
+   width="210mm"
+   height="297mm"
+   viewBox="0 0 210 297"
+   version="1.1"
+   id="svg1030"
+   sodipodi:docname="I12.svg"
+   inkscape:version="1.2.2 (b0a8486541, 2022-12-01)"
+   xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
+   xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd"
+   xmlns="http://www.w3.org/2000/svg"
+   xmlns:svg="http://www.w3.org/2000/svg">
+  <sodipodi:namedview
+     id="namedview1032"
+     pagecolor="#ffffff"
+     bordercolor="#666666"
+     borderopacity="1.0"
+     inkscape:pageshadow="2"
+     inkscape:pageopacity="0.0"
+     inkscape:pagecheckerboard="0"
+     inkscape:document-units="mm"
+     showgrid="false"
+     inkscape:zoom="0.64052329"
+     inkscape:cx="396.55076"
+     inkscape:cy="562.82106"
+     inkscape:window-width="1920"
+     inkscape:window-height="1011"
+     inkscape:window-x="0"
+     inkscape:window-y="32"
+     inkscape:window-maximized="1"
+     inkscape:current-layer="layer1"
+     inkscape:showpageshadow="2"
+     inkscape:deskcolor="#d1d1d1" />
+  <defs
+     id="defs1027" />
+  <g
+     inkscape:label="Layer 1"
+     inkscape:groupmode="layer"
+     id="layer1">
+    <path
+       id="path120"
+       style="fill:none;stroke:#000000;stroke-width:0.264583;stroke-linecap:round"
+       d="M 99.8483 158.329 C 101.784 159.074 103.927 159.074 105.862 158.329 C 107.746 157.597 109.72 157.122 111.73 156.914 C 113.82 156.684 115.752 155.691 117.155 154.124 C 118.541 152.579 120.112 151.211 121.833 150.05 C 123.632 148.814 124.919 146.965 125.453 144.848 C 125.99 142.745 126.748 140.704 127.716 138.761 C 128.215 137.734 128.527 136.625 128.636 135.488 C 128.527 134.351 128.215 133.243 127.716 132.215 C 126.748 130.272 125.99 128.231 125.453 126.128 C 124.919 124.012 123.632 122.163 121.833 120.926 C 120.112 119.766 118.541 118.397 117.155 116.852 C 115.752 115.286 113.82 114.292 111.73 114.063 C 109.72 113.855 107.746 113.379 105.862 112.648 C 103.927 111.903 101.784 111.903 99.8483 112.648 C 97.9643 113.379 95.9908 113.855 93.9806 114.063 C 91.8903 114.292 89.9583 115.286 88.5554 116.852 C 87.1696 118.397 85.5985 119.766 83.8777 120.926 C 82.079 122.163 80.7922 124.012 80.2577 126.128 C 79.7208 128.231 78.9622 130.272 77.9947 132.215 C 77.4954 133.243 77.1837 134.351 77.0744 135.488 C 77.1837 136.625 77.4954 137.734 77.9947 138.761 C 78.9622 140.704 79.7208 142.745 80.2577 144.848 C 80.7922 146.965 82.079 148.814 83.8777 150.05 C 85.5985 151.211 87.1696 152.579 88.5554 154.124 C 89.9583 155.691 91.8903 156.684 93.9806 156.914 C 95.9908 157.122 97.9643 157.597 99.8483 158.329 Z" />
+  </g>
+</svg>
