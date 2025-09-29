@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "LE-RoseEngine"
-version = "0.1.6"
+version = "0.1.7"
 description = "Rose Engine emulator for the LatheEngraver"
 authors = [
     {name = "Paul Paukstelis", email = "transpirationturning@gmail.com"}
