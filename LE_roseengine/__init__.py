@@ -562,7 +562,7 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
         #phase offsets applied here to the working array
         phasecmds = []
         pump_rad_start = 0
-        if self.pump_offset:
+        if self.pump_offset and self.pump_main:
             #base the roll on self.a_inc
             roll = int(self.pump_offset/self.a_inc)
             #determine absolute value at this position from main
