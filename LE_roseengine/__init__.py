@@ -668,6 +668,8 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
         self._logger.info("Thread ended")
 
     def _start_geo(self):
+        self.rock_work = []
+        self.pump_work = []
         self._logger.debug("Starting geometric job")
         self.start_coords["x"] = self.current_x
         self.start_coords["z"] = self.current_z
@@ -735,6 +737,8 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
         self.jobThread = threading.Thread(target=self._geometric_thread).start()
 
     def _start_job(self):
+        self.rock_work = []
+        self.pump_work = []
         if self.running:
             return
         if self.rock_main and self.rock_main["type"] == "geometric":
@@ -776,24 +780,29 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
         gcode.append(f"G92 A{theA}")
         #TODO: If using B-angle, it is possible that start position X is less than end, need to take into account
         x,z,a = self.start_coords["x"], self.start_coords["z"], self.start_coords["a"]
-        if self.rock_main and not self.pump_main:
+        if len(self.rock_work) and not len(self.pump_work):
             #assume we are just going to back and then in/out
             if self.b_adjust: #do we need to compensate for the actual B-angle?
                 if self.current_x > x:
+                    self._logger.debug("current_x > than x")
                     gcode.append(f"G94 G91 G1 X5 F1000")
                     gcode.append(f"G90 G0 Z{z} A{a}")
                     gcode.append(f"G90 G0 X{x}")
+                else:
+                    gcode.append(f"G94 G90 G0 Z{z} X{x}")
+                    gcode.append(f"G0 A0")
             else:
                 gcode.append(f"G94 G90 G0 X{x}")
                 gcode.append(f"G90 G0 Z{z} A{a}")
-        if self.pump_main and not self.rock_main:
+        if len(self.pump_work) and not len(self.rock_work):
             gcode.append(f"G94 G90 G0 Z{z}")
             gcode.append(f"G0 X{x} A{a}")
-        if self.pump_main and self.rock_main:
+        if len(self.pump_work) and len(self.rock_work):
             gcode.append(f"G94 G90 G0 Z{z} X{x}")
             gcode.append(f"G0 A0")
         gcode.append("M30")
         self.reset_cmds = False
+        self._logger.debug(gcode)
         self._printer.commands(gcode)
         
 
