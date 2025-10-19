@@ -455,9 +455,18 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
             angles = uniform_angles
             radii = uniform_radii
 
-        if len(angles) > expected_points:
-            special_case = True
-
+            # Roll so the largest radius is at index 0, then normalize angles so index 0 == 0°
+            max_idx = int(np.argmax(radii))
+            self._logger.debug(f"Interpolation: max_idx={max_idx}, max_radius={radii[max_idx]:.3f}, angle_at_max={angles[max_idx]:.6f}")
+            radii = np.roll(radii, -max_idx)
+            angles = np.roll(angles, -max_idx)
+            # Normalize relative to first angle and keep values in [0,360)
+            angles = (angles - angles[0]) % 360
+            angles[0] = 0.0
+            # Reduce floating noise
+            angles = np.round(angles, 6)
+            self._logger.debug(f"Post-interp first_angle={angles[0]}, first_radius={radii[0]:.3f}")
+        
         rosette = {
             "radii": radii,
             "angles": angles,
@@ -864,7 +873,7 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
                 data = dict(type="pump", special=s, radii=r, angles=a, maxrad=self.pump_main["max_radius"], minrad=self.pump_main["min_radius"])
                 #self._logger.info(f"Loaded pump rosette: {self.pump_main}")
             
-            #self._logger.info(data)
+            self._logger.debug(data)
             self._plugin_manager.send_plugin_message('roseengine', data)
             if s:
                 msg = dict(
