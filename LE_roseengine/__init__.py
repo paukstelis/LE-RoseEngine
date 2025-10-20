@@ -789,7 +789,7 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
         gcode.append(f"G92 A{theA}")
         #TODO: If using B-angle, it is possible that start position X is less than end, need to take into account
         x,z,a = self.start_coords["x"], self.start_coords["z"], self.start_coords["a"]
-        if len(self.rock_work) and not len(self.pump_work):
+        if (len(self.rock_work) or len(self.geo_radii)) and not len(self.pump_work):
             #assume we are just going to back and then in/out
             if self.b_adjust: #do we need to compensate for the actual B-angle?
                 if self.current_x > x:
