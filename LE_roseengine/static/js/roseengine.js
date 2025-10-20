@@ -180,6 +180,23 @@ $(function() {
             win.document.head.appendChild(script);
         });
 
+        $("#pumparea").on("click", function() {
+            var plotDiv = document.getElementById('pumparea');
+            var plotData = plotDiv.data;
+            var plotLayout = plotDiv.layout;
+
+            var win = window.open("", "LargePump", "width=1000,height=800");
+            // Wait for the window to be ready
+            win.document.body.innerHTML = '<div id="largeplot2" style="width:900px;height:700px;"></div>';
+            // Add the script tag for Plotly
+            var script = win.document.createElement('script');
+            script.src = "/plugin/roseengine/static/js/plotly-latest.min.js";
+            script.onload = function() {
+                win.Plotly.newPlot('largeplot2', plotData, plotLayout, {displayModeBar: false});
+            };
+            win.document.head.appendChild(script);
+        });
+
         self.special_warning = function(a,b) {
             var area = b+'area';
             if (a === "off") {
