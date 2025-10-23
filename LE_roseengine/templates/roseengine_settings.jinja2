@@ -23,6 +23,10 @@
             <input type="checkbox" data-bind="checked: settings.plugins.roseengine.auto_reset"> Auto-reset on stop
             <i class="icon icon-info-sign" title="" data-toggle="tooltip"></i>
         </label>
+        <label>
+            <input type="checkbox" data-bind="checked: settings.plugins.roseengine.relative_return">Return to relative start position during recording
+            <i class="icon icon-info-sign" title="" data-toggle="tooltip"></i>
+        </label>
         <h3>Geometric Chuck options</h3>
         <label>
             <input type="number" step="1" min="2" max="10" class="input-mini" data-bind="numeric, value: settings.plugins.roseengine.geo_stages"> Geometric chuck stages

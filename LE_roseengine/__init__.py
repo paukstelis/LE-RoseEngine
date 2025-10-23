@@ -75,7 +75,7 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
         self.forward = True
 
         self.auto_reset = False
-        self.relative_return = True
+        self.relative_return = False
         self.rr = False
         self.reset_cmds = False
         self.state = None
@@ -114,6 +114,7 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
         self.geo_points = int(self._settings.get(["geo_points"]))
         self.geo_thresh = int(self._settings.get(["geo_thresh"]))
         self.geo_interp = int(self._settings.get(["geo_interp"]))
+        self.relative_return = bool(self._settings.get(["relative_return"]))
 
         storage = self._file_manager._storage("local")
         
