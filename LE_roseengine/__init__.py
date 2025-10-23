@@ -132,8 +132,6 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
                         shutil.copy(source_file, destination_file)
                         self._logger.info(f"Copied {file_name} to rosette folder")
 
-
-
     def get_settings_defaults(self):
         return dict(
             a_inc=0.5,
