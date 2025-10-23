@@ -386,8 +386,8 @@ $(function() {
             var stages_data = self.stages().map(function(stage, idx) {
                 if (randomize) {
                     var radius = Math.floor(Math.random() * 100) + 1;
-                    var p = (idx === 0) ? 1 : Math.floor(Math.random() * 81) - 40;
-                    var q = (idx === 0) ? 1 : Math.floor(Math.random() * 81) - 40;
+                    var p = Math.floor(Math.random() * 81) - 40;
+                    var q = Math.floor(Math.random() * 81) - 40;
                     var phase = 0;
 
                     // Update the knockout observables so UI reflects the random values
