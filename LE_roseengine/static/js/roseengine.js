@@ -45,11 +45,10 @@ $(function() {
         self.geo_stages = ko.observable(2);
         self.geo_points = ko.observable(6000);
 
-
         //Recording
         self.recording  = ko.observable(false);
         self.lines = ko.observable(0); //number of lines written/stored
-
+        self.relative_return = ko.observable(false);
 
         tab = document.getElementById("tab_plugin_roseengine_link");
         tab.innerHTML = tab.innerHTML.replaceAll("Roseengine Plugin", "Rose Engine");
@@ -99,6 +98,7 @@ $(function() {
             self.a_inc = self.settings.a_inc();
             self.geo_stages = self.settings.geo_stages();
             self.geo_points = self.settings.geo_points();
+            self.relative_return = self.settings.relative_return();
             var numStages = parseInt(self.geo_stages, 10);
             var stagesArr = [];
             for (var i = 0; i < numStages; i++) {
@@ -386,8 +386,8 @@ $(function() {
             var stages_data = self.stages().map(function(stage, idx) {
                 if (randomize) {
                     var radius = Math.floor(Math.random() * 100) + 1;
-                    var p = (idx === 0) ? 1 : Math.floor(Math.random() * 81) - 40;
-                    var q = (idx === 0) ? 1 : Math.floor(Math.random() * 81) - 40;
+                    var p = Math.floor(Math.random() * 81) - 40;
+                    var q = Math.floor(Math.random() * 81) - 40;
                     var phase = 0;
 
                     // Update the knockout observables so UI reflects the random values

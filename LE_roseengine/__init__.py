@@ -75,6 +75,8 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
         self.forward = True
 
         self.auto_reset = False
+        self.relative_return = False
+        self.rr = False
         self.reset_cmds = False
         self.state = None
         self.stopping = False
@@ -112,6 +114,7 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
         self.geo_points = int(self._settings.get(["geo_points"]))
         self.geo_thresh = int(self._settings.get(["geo_thresh"]))
         self.geo_interp = int(self._settings.get(["geo_interp"]))
+        self.relative_return = bool(self._settings.get(["relative_return"]))
 
         storage = self._file_manager._storage("local")
         
@@ -128,8 +131,6 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
                         destination_file = os.path.join(templates_folder, file_name)
                         shutil.copy(source_file, destination_file)
                         self._logger.info(f"Copied {file_name} to rosette folder")
-
-
 
     def get_settings_defaults(self):
         return dict(
@@ -226,12 +227,10 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
                 self.geo.add_stage(radius=stage["radius"],
                                 p=stage["p"],
                                 q=stage["q"],
-                                phase=np.radians(stage["phase"]),
-                                internal=False
+                                phase=np.radians(stage["phase"])
                                 )
                 self._logger.debug("Added stage")
-        #leave out "pen" for now
-        self.geo.set_pen(radius=0)
+
         periods = self.geo.required_periods()
         #if periods > 30:
         #    periods  = 30
@@ -783,12 +782,17 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
 
     def _reset_gcode(self):
         gcode = []
+        return_gcode = []
         #reset A modulo
         self._logger.debug(f"current_a: {self.current_a}")
         theA = self.current_a % 360
+        if self.relative_return:
+            self.rr = True
         gcode.append(f"G92 A{theA}")
+        return_gcode.append(f"G92 A{theA}")
         #TODO: If using B-angle, it is possible that start position X is less than end, need to take into account
         x,z,a = self.start_coords["x"], self.start_coords["z"], self.start_coords["a"]
+
         if (len(self.rock_work) or len(self.geo_radii)) and not len(self.pump_work):
             #assume we are just going to back and then in/out
             if self.b_adjust: #do we need to compensate for the actual B-angle?
@@ -796,24 +800,36 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
                     self._logger.debug("current_x > than x")
                     gcode.append(f"G94 G91 G1 X5 F1000")
                     gcode.append(f"G90 G0 Z{z} A{a}")
+                    return_gcode.append(f"G90 G0 SC_Z A0")
                     gcode.append(f"G90 G0 X{x}")
+                    return_gcode.append(f"G90 G0 SC_X")
                 else:
                     gcode.append(f"G94 G90 G0 Z{z} X{x}")
+                    return_gcode.append(f"G94 G90 G0 SC_Z SC_X")
                     gcode.append(f"G0 A0")
+                    return_gcode.append("G0 A0")
             else:
                 gcode.append(f"G94 G90 G0 X{x}")
+                return_gcode.append(f"G94 G90 G0 SC_X")
                 gcode.append(f"G90 G0 Z{z} A{a}")
+                return_gcode.append(f"G90 G0 SC_Z A0")
         if len(self.pump_work) and not len(self.rock_work):
             gcode.append(f"G94 G90 G0 Z{z}")
             gcode.append(f"G0 X{x} A{a}")
+            return_gcode.append(f"G94 G90 G0 SC_Z")
+            return_gcode.append(f"G0 SC_X A0")
         if len(self.pump_work) and len(self.rock_work):
             gcode.append(f"G94 G90 G0 Z{z} X{x}")
             gcode.append(f"G0 A0")
+            return_gcode.append(f"G94 G90 G0 SC_Z SC_X")
+            return_gcode.append(f"G0 A0")
+        gcode.append("STOPCAP")
         gcode.append("M30")
         self.reset_cmds = False
         self._logger.debug(gcode)
         self._printer.commands(gcode)
-        
+        if self.relative_return and self.recording:
+            self.recorded.extend(return_gcode)       
 
     def _stop_job(self):
         if not self.running:
@@ -827,6 +843,9 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
     def write_gcode(self):
         filename = time.strftime("%Y%m%d-%H%M") + "roseengine.gcode"
         path_on_disk = "{}/{}".format(self._settings.getBaseFolder("watched"), filename)
+        if self.relative_return:
+            #need this inserted after G92 A0
+            self.recorded.insert(1, "STARTCAP")
         with open(path_on_disk,"w") as newfile:
             #write in comment stuff here
             for line in self.recorded:
@@ -1099,8 +1118,12 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
     def hook_gcode_sending(self, comm_instance, phase, cmd, cmd_type, gcode, *args, **kwargs):
         if self.stopping and self.state == "Run":
             return (None, )
-        if self.recording:
+        if self.recording and not self.rr:
             self.recorded.append(cmd)
+        if cmd == "STOPCAP":
+            self.rr = False
+            return (None,)
+
 
     ##~~ Softwareupdate hook
 
