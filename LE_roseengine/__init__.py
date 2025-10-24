@@ -143,6 +143,7 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
             geo_points=6000,
             geo_thresh=500,
             geo_interp=6000,
+            relative_return=False,
 
             )
     
