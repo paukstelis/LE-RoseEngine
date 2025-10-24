@@ -213,8 +213,8 @@
                             <i class="fa fa-arrow-left"></i>
                         </button>
 
-                        <button id="hidden3" class="btn box" style="visibility: hidden; border: 1px solid; width: 40px; height: 40px;" data-bind="click: function() {re_jog('down')}">
-                            <i class="fa fa-arrow-up"></i>
+                        <button id="laser" class="btn box" style="border: 1px solid; width: 40px; height: 40px;" data-bind="click: function() {toggle_laser()}">
+                            <i class="fa fa-bullseye"></i>
                         </button>
 
                         <button id="ctrl-xup" class="btn box" style="border: 1px solid; width: 40px; height: 40px;" data-bind="enable: is_operational() && available(), click: function() {re_jog('right')}">

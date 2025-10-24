@@ -50,6 +50,10 @@ $(function() {
         self.lines = ko.observable(0); //number of lines written/stored
         self.relative_return = ko.observable(false);
 
+        //laser
+        self.laser_base = ko.observable(200);
+        self.laser_feed = ko.observable(200);
+
         tab = document.getElementById("tab_plugin_roseengine_link");
         tab.innerHTML = tab.innerHTML.replaceAll("Roseengine Plugin", "Rose Engine");
         // assign the injected parameters, e.g.:
@@ -440,6 +444,17 @@ $(function() {
 
         };
 
+        self.toggle_laser = function() {
+
+            OctoPrint.simpleApiCommand("roseengine", "laser")
+                .done(function(response) {
+                    console.log("Laser toggle sent");
+                })
+                .fail(function() {
+                    console.error("Laser toggle failed");
+                });
+        }
+
         self.record = function(operation) {
             var data = {
                 op: operation,
@@ -529,6 +544,8 @@ $(function() {
                 e_ratio: self.e_ratio(),
                 b_adjust: self.b_adjust(),
                 bref: self.bref(),
+                laser_base: self.laser_base(),
+                laser_feed: self.laser_feed(),
                
 
             };

@@ -94,7 +94,11 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
         self.geo_thresh = 500
         self.geo_interp = 6000
 
-        
+        #laser
+        self.laser = False
+        self.laser_feed = 0
+        self.laser_base = 0
+
         #coordinate tracking
         self.current_a = None
         self.current_b = None
@@ -143,6 +147,7 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
             geo_points=6000,
             geo_thresh=500,
             geo_interp=6000,
+            relative_return=False,
 
             )
     
@@ -500,6 +505,9 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
             cmdlist = []
             cmdlist.append("G92 A0")
             cmdlist.append("M3 S1000")
+            #used for laser radius tracking
+            track_z = self.start_coords["z"]
+
             while self.running:
                 self.buffer = 0
                 degrees_sec = (self.rpm * 360) / 60
@@ -527,8 +535,8 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
                     feed = (360/avg_a_inc) * self.rpm
                     rchunk = self.geo_radii[i:i+self.chunk]
                     achunk = self.geo_angles[i:i+self.chunk]
-                    #self.buffer = 0
-                    #need to know the actual angle so we know where we are for ellipse
+                    chunk_distance = 0
+                    
                     for c in range(0, len(rchunk)):
                         a = achunk[c]
                         z = rchunk[c]
@@ -537,11 +545,41 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
                             bangle = math.radians(self.current_b - self.bref) *-1
                             x = x*math.cos(bangle) + z*math.sin(bangle)
                             z = -z*math.sin(bangle) + z*math.cos(bangle)
+                        track_z = track_z + z
                         cmdlist.append(f"G93 G91 G1 X{x:0.3f} A{a:0.3f} Z{z:0.3f} F{feed:0.1f}")
+                        if self.laser:
+                            #calculate the chunk distance
+                            arc = track_z * math.radians(a)
+                            chunk_distance = chunk_distance + math.sqrt(arc**2 + x**2 + z**2)
+                    if self.laser and chunk_distance:
+                        #figure out scaling of power here
+                        calc_time = len(rchunk) / (feed) #time in minutes to complete chunk
+                        nf = chunk_distance/calc_time #calculated feed
+                        sf = nf/self.laser_feed 
+                        scaled = int(self.laser_base * sf)
+                        cmdlist[0] = cmdlist[0] + f" S{scaled}"
+
                     #All modifications should be PRE injection
                     if self.inject:
-                        cmdlist[-1] = self._update_injection(cmdlist[-1], self.inject)
-                        self.inject = None
+                        if self.inject.startswith("S"):
+                            m = re.search(r"S\s*=?\s*([0-9]+)", self.inject, re.IGNORECASE)
+                            if m:
+                                val = int(m.group(1))
+                                # set laser state and base power
+                                if val == 0:
+                                    self.laser = False
+                                    cmdlist.append("S0")
+                                else:
+                                    self.laser = True
+                                    self.laser_base = val
+                                    cmdlist.append(f"M4 S{val}")
+                                    self._logger.info(f"Injected laser power command M4 S{val}, laser={'on' if self.laser else 'off'}")
+                            else:
+                                self._logger.warning(f"Unrecognized S-inject format: {self.inject}")
+                            self.inject = None
+                        else:
+                            cmdlist[-1] = self._update_injection(cmdlist[-1], self.inject)
+                            self.inject = None
                     # Loop until we are ready to send the next chunk
                     tms = round(time.time() * 1000)
                     while self.feedcontrol["next"] - tms > self.ms_threshold or self.buffer < bf_target:
@@ -564,6 +602,8 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
         except Exception as e:
             self._logger.error(f"Exception in job thread: {e}", exc_info=True)
         self._logger.info("Geometric Thread ended")
+        if self.laser: #just a safety, will also send M5
+            self._printer.commands(["S0"])
 
     def _job_thread(self):  
         self._logger.info("Starting job thread")
@@ -593,6 +633,7 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
             cmdlist.append("M3 S1000")
             if len(phasecmds):
                 cmdlist.extend(phasecmds)
+            track_z = self.start_coords["z"]
             while self.running:
                 #A-axis reset
                 #cmdlist.append("G92 A0")
@@ -625,8 +666,7 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
 
                     feed = (360/self.a_inc) * self.rpm
                     cmdchunk = self.working[i:i+self.chunk]
-                    #self.buffer = 0
-                    #need to know the actual angle so we know where we are for ellipse
+                    chunk_distance = 0
                     current_angle = i * self.a_inc
                     for cmd in cmdchunk:
                         x = cmd[1]
@@ -644,12 +684,44 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
                             x = x*math.cos(bangle) + z*math.sin(bangle)
                             z = -z*math.sin(bangle) + z*math.cos(bangle)
                             #self._logger.info(f"modified x, z: {x} {z}")
+                        track_z = track_z + z
+                        if self.laser:
+                            #calculate the chunk distance
+                            arc = track_z * math.radians(self.a_inc)
+                            chunk_distance = chunk_distance + math.sqrt(arc**2 + x**2 + z**2)
 
                         cmdlist.append(f"G93 G91 G1 A{dir}{self.a_inc} X{x:0.3f} Z{z:0.3f} F{feed:0.1f}")
+                    
+                    if self.laser and chunk_distance:
+                        #figure out scaling of power here
+                        calc_time = len(cmdchunk) / (feed) #time in minutes to complete chunk
+                        nf = chunk_distance/calc_time #calculated feed
+                        sf = nf/self.laser_feed 
+                        scaled = int(self.laser_base * sf)
+                        self._logger.debug(f"calc time: {calc_time}, nf: {nf}, sf: {sf}, scaled: {scaled}")
+                        cmdlist[0] = cmdlist[0] + f" S{scaled}"
+                    
                     #All modifications should be PRE injection
                     if self.inject:
-                        cmdlist[-1] = self._update_injection(cmdlist[-1], self.inject)
-                        self.inject = None
+                        if self.inject.startswith("S"):
+                            m = re.search(r"S\s*=?\s*([0-9]+)", self.inject, re.IGNORECASE)
+                            if m:
+                                val = int(m.group(1))
+                                # set laser state and base power
+                                if val == 0:
+                                    self.laser = False
+                                    cmdlist.append("S0")
+                                else:
+                                    self.laser = True
+                                    self.laser_base = val
+                                    cmdlist.append(f"M4 S{val}")
+                                    self._logger.info(f"Injected laser power command M4 S{val}, laser={'on' if self.laser else 'off'}")
+                            else:
+                                self._logger.warning(f"Unrecognized S-inject format: {self.inject}")
+                            self.inject = None
+                        else:
+                            cmdlist[-1] = self._update_injection(cmdlist[-1], self.inject)
+                            self.inject = None
                     # Loop until we are ready to send the next chunk
                     tms = round(time.time() * 1000)
                     while self.feedcontrol["next"] - tms > self.ms_threshold or self.buffer < bf_target:
@@ -674,6 +746,8 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
         except Exception as e:
             self._logger.error(f"Exception in job thread: {e}", exc_info=True)
         self._logger.info("Thread ended")
+        if self.laser:
+            self._printer.commands(["S0"])
 
     def _start_geo(self):
         self.rock_work = []
@@ -868,6 +942,7 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
             parametric=[],
             geometric=[],
             recording=[],
+            laser=[],
         )
     
     def on_api_command(self, command, data):
@@ -995,6 +1070,8 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
             self.pump_offset = float(data["pump_offset"])
             self.b_adjust = bool(data["b_adjust"])
             self.bref = float(data["bref"])
+            self.laser_base = int(data["laser_base"]) #should these be dynamic?
+            self.laser_feed = int(data["laser_feed"]) 
             self._logger.info("ready to start job")
             if float(data["e_ratio"]) > 1.0 and not self.rock_main["type"] == "geometric":
                 rad = float(data["e_rad"])
@@ -1054,6 +1131,19 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
                     return
             else:
                 self._printer.commands(cmd)
+
+        if command == "laser":
+            self._logger.debug("Laser toggle")
+            if not self.running:
+                return
+            if not self.laser:
+                cmd = f"S{self.laser_base}"
+                self.inject = cmd
+                return
+            else:
+                cmd = "S0"
+                self.inject = cmd
+                return
 
         if command == "goto_start":
             if self.running:
