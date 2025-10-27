@@ -53,6 +53,7 @@ $(function() {
         //laser
         self.laser_base = ko.observable(200);
         self.laser_feed = ko.observable(200);
+        self.laser_mode = ko.observable(false);
 
         tab = document.getElementById("tab_plugin_roseengine_link");
         tab.innerHTML = tab.innerHTML.replaceAll("Roseengine Plugin", "Rose Engine");
@@ -120,10 +121,14 @@ $(function() {
             var po = $('#po_span');
             var po_slider = $('#pump_offset');
             po_slider.attr("step", self.a_inc);
+        };
 
+        self.fromCurrentData = function(data) {
+            self._processStateData(data.state);
+        };
 
-            
-
+        self.fromHistoryData = function(data) {
+            self._processStateData(data.state);
         };
 
         self._processStateData = function(data) {
@@ -694,9 +699,6 @@ $(function() {
                     button.click();
                 }
             }
-                
-            
-
         };
 
         $(document).ready(function() {
@@ -722,7 +724,7 @@ $(function() {
 
     OCTOPRINT_VIEWMODELS.push({
         construct: RoseengineViewModel,
-        dependencies: ["settingsViewModel", "filesViewModel",  "accessViewModel","loginStateViewModel"],
-        elements: [ "#tab_plugin_roseengine","#settings_plugin_roseengine" ]
+        dependencies: ["settingsViewModel", "filesViewModel",  "accessViewModel","loginStateViewModel",],
+        elements: [ "#tab_plugin_roseengine", ]
     });
 });

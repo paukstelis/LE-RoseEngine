@@ -238,6 +238,14 @@
                 </tbody>
             </table>    
             </div>
+            <div>
+                <label title="The base laser power, 0 to 1000" for="laser_power">Laser Power:</label>
+                <input id="laser_power" type="number" max="1000" value="1" step="1" data-bind="value: laser_base">
+
+                <label title="The target <b>linear</b> feed rate (mm/min) for the provided laser power, only used if power correction is on" for="laser_feed">
+                Nominal feed:</label>
+                <input id="laser_feed" type="number" value="1" step="1" data-bind="value: laser_feed">
+            </div>
         </div>
     </div>
 </div>

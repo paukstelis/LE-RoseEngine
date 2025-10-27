@@ -27,6 +27,34 @@
             <input type="checkbox" data-bind="checked: settings.plugins.roseengine.relative_return">Return to relative start position during recording
             <i class="icon icon-info-sign" title="" data-toggle="tooltip"></i>
         </label>
+        <h3>Laser options</h3>
+        <label>
+            <input type="checkbox" data-bind="checked: settings.plugins.roseengine.power_correct">Perform laser power correction based on calculated linear movements
+            <i class="icon icon-info-sign" title="" data-toggle="tooltip"></i>
+        </label>
+        <label>
+            <input type="checkbox" data-bind="checked: settings.plugins.roseengine.use_m3">Use M3, rather than M4
+            <i class="icon icon-info-sign" title="" data-toggle="tooltip"></i>
+        </label>
+        <label>
+            <input type="checkbox" data-bind="checked: settings.plugins.roseengine.laser_start">Start laser with run
+            <i class="icon icon-info-sign" title="" data-toggle="tooltip"></i>
+        </label>
+        <label>
+            <input type="checkbox" data-bind="checked: settings.plugins.roseengine.laser_stop">Stop run after single pass
+            <i class="icon icon-info-sign" title="" data-toggle="tooltip"></i>
+        </label>
+        <label>
+            <input type="number" step="1" min="1" max="10" class="input-mini" data-bind="numeric, value: settings.plugins.roseengine.max_correct">
+            Maximum power correction scale factor
+            <i class="icon icon-info-sign" title="" data-toggle="tooltip"></i>
+        </label>
+        <label>
+            <input type="number" step="any" class="input-mini" data-bind="numeric, value: settings.plugins.roseengine.min_correct">
+            Minimum power correction scale factor
+            <i class="icon icon-info-sign" title="" data-toggle="tooltip"></i>
+        </label>
+        <br>
         <h3>Geometric Chuck options</h3>
         <label>
             <input type="number" step="1" min="2" max="10" class="input-mini" data-bind="numeric, value: settings.plugins.roseengine.geo_stages"> Geometric chuck stages

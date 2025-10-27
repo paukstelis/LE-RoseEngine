@@ -27,6 +27,7 @@ import shutil
 from svgpathtools import *
 from itertools import zip_longest
 from . import geometric
+import json
 class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
     octoprint.plugin.AssetPlugin,
     octoprint.plugin.StartupPlugin,
@@ -95,9 +96,17 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
         self.geo_interp = 6000
 
         #laser
+        self.laser_mode = False
         self.laser = False
         self.laser_feed = 0
         self.laser_base = 0
+        #laser settings
+        self.power_correct = False
+        self.max_correct = 3
+        self.min_correct = 0.5
+        self.use_m3 = False
+        self.laser_start = False
+        self.laser_stop = False
 
         #coordinate tracking
         self.current_a = None
@@ -119,6 +128,12 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
         self.geo_thresh = int(self._settings.get(["geo_thresh"]))
         self.geo_interp = int(self._settings.get(["geo_interp"]))
         self.relative_return = bool(self._settings.get(["relative_return"]))
+        self.power_correct = bool(self._settings.get(["power_correct"]))
+        self.max_correct = float(self._settings.get(["max_correct"]))
+        self.min_correct = float(self._settings.get(["min_correct"]))
+        self.use_m3 = bool(self._settings.get(["use_m3"]))
+        self.laser_start = bool(self._settings.get(["laser_start"]))
+        self.laser_stop = bool(self._settings.get(["laser_stop"]))
 
         storage = self._file_manager._storage("local")
         
@@ -148,6 +163,11 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
             geo_thresh=500,
             geo_interp=6000,
             relative_return=False,
+            power_correct=False,
+            laser_start=False,
+            laser_stop=False,
+            max_correct=10,
+            min_correct=0.0001
 
             )
     
@@ -165,8 +185,6 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
     ##~~ AssetPlugin mixin
 
     def get_assets(self):
-        # Define your plugin's asset files to automatically include in the
-        # core UI here.
         return {
             "js": ["js/roseengine.js", "js/plotly-latest.min.js"],
             "css": ["css/roseengine.css"],
@@ -241,7 +259,13 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
         #    periods  = 30
         self._logger.debug(f"Periods: {periods}")
         t, angles, radii = self.geo.generate_polar_path(num_points=self.geo_points, t_range=(0, 2*np.pi * periods))
-
+        avg_a_inc = np.mean(np.abs(angles))
+        if avg_a_inc < 0.05:
+            msg=dict(title="Angle Error",
+                      text="The average angular displacement is too low. Decrease the sample number and try again.",
+                      type="warning")
+            self.send_le_error(msg)
+            return
         angles = np.unwrap(angles)
         angles = np.degrees(angles)
         
@@ -504,7 +528,13 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
             loop_end = None
             cmdlist = []
             cmdlist.append("G92 A0")
-            cmdlist.append("M3 S1000")
+            if self.laser_start:
+                lc = "M4"
+                if self.use_m3:
+                    lc="M3"
+                cmdlist.append(f"{lc} S{self.laser_base}")
+                self.laser = True
+            #cmdlist.append("M3 S1000")
             #used for laser radius tracking
             track_z = self.start_coords["z"]
 
@@ -551,17 +581,21 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
                             #calculate the chunk distance
                             arc = track_z * math.radians(a)
                             chunk_distance = chunk_distance + math.sqrt(arc**2 + x**2 + z**2)
-                    if self.laser and chunk_distance:
+                    if self.laser and chunk_distance and self.power_correct:
                         #figure out scaling of power here
                         calc_time = len(rchunk) / (feed) #time in minutes to complete chunk
                         nf = chunk_distance/calc_time #calculated feed
                         sf = nf/self.laser_feed 
+                        if sf < self.min_correct:
+                            sf = self.min_correct
+                        if sf > self.max_correct:
+                            sf = self.max_correct
                         scaled = int(self.laser_base * sf)
                         cmdlist[0] = cmdlist[0] + f" S{scaled}"
 
                     #All modifications should be PRE injection
                     if self.inject:
-                        if self.inject.startswith("S"):
+                        if not isinstance(self.inject, tuple) and self.inject.startswith("S"):
                             m = re.search(r"S\s*=?\s*([0-9]+)", self.inject, re.IGNORECASE)
                             if m:
                                 val = int(m.group(1))
@@ -572,7 +606,10 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
                                 else:
                                     self.laser = True
                                     self.laser_base = val
-                                    cmdlist.append(f"M4 S{val}")
+                                    lc = "M4"
+                                    if self.use_m3:
+                                        lc="M3"
+                                    cmdlist.append(f"{lc} S{val}")
                                     self._logger.info(f"Injected laser power command M4 S{val}, laser={'on' if self.laser else 'off'}")
                             else:
                                 self._logger.warning(f"Unrecognized S-inject format: {self.inject}")
@@ -599,6 +636,11 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
                     cmdlist = []
                     if not self.running:
                         break
+                if self.laser and self.laser_stop:
+                    self.running = False
+                    self._logger.debug("Stopping from laser_stop")
+                    self._printer.commands(["S0"])
+    
         except Exception as e:
             self._logger.error(f"Exception in job thread: {e}", exc_info=True)
         self._logger.info("Geometric Thread ended")
@@ -630,7 +672,13 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
             loop_end = None
             cmdlist = []
             cmdlist.append("G92 A0")
-            cmdlist.append("M3 S1000")
+            if self.laser_start:
+                lc = "M4"
+                if self.use_m3:
+                    lc="M3"
+                cmdlist.append(f"{lc} S{self.laser_base}")
+                self.laser = True
+            #cmdlist.append("M3 S1000")
             if len(phasecmds):
                 cmdlist.extend(phasecmds)
             track_z = self.start_coords["z"]
@@ -692,18 +740,22 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
 
                         cmdlist.append(f"G93 G91 G1 A{dir}{self.a_inc} X{x:0.3f} Z{z:0.3f} F{feed:0.1f}")
                     
-                    if self.laser and chunk_distance:
+                    if self.laser and chunk_distance and self.power_correct:
                         #figure out scaling of power here
                         calc_time = len(cmdchunk) / (feed) #time in minutes to complete chunk
                         nf = chunk_distance/calc_time #calculated feed
-                        sf = nf/self.laser_feed 
+                        sf = nf/self.laser_feed
+                        if sf < self.min_correct:
+                            sf = self.min_correct
+                        if sf > self.max_correct:
+                            sf = self.max_correct
                         scaled = int(self.laser_base * sf)
                         self._logger.debug(f"calc time: {calc_time}, nf: {nf}, sf: {sf}, scaled: {scaled}")
                         cmdlist[0] = cmdlist[0] + f" S{scaled}"
                     
                     #All modifications should be PRE injection
                     if self.inject:
-                        if self.inject.startswith("S"):
+                        if not isinstance(self.inject,tuple) and self.inject.startswith("S"):
                             m = re.search(r"S\s*=?\s*([0-9]+)", self.inject, re.IGNORECASE)
                             if m:
                                 val = int(m.group(1))
@@ -714,7 +766,10 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
                                 else:
                                     self.laser = True
                                     self.laser_base = val
-                                    cmdlist.append(f"M4 S{val}")
+                                    lc = "M4"
+                                    if self.use_m3:
+                                        lc="M3"
+                                    cmdlist.append(f"{lc} S{val}")
                                     self._logger.info(f"Injected laser power command M4 S{val}, laser={'on' if self.laser else 'off'}")
                             else:
                                 self._logger.warning(f"Unrecognized S-inject format: {self.inject}")
@@ -743,6 +798,10 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
                     self.last_position = i
                     if not self.running:
                         break
+                if self.laser and self.laser_stop:
+                    self.running = False
+                    self._printer.commands(["S0"])
+
         except Exception as e:
             self._logger.error(f"Exception in job thread: {e}", exc_info=True)
         self._logger.info("Thread ended")
@@ -943,6 +1002,7 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
             geometric=[],
             recording=[],
             laser=[],
+            save_geo=[]
         )
     
     def on_api_command(self, command, data):
@@ -1060,7 +1120,59 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
 
             self._plugin_manager.send_plugin_message('roseengine', returndata) 
 
-   
+        
+        if command == "save_geo":
+            """
+            Append current geometric chuck definition to uploads/rosette/saved_geos.json
+            """
+            try:
+                if not hasattr(self, "geo") or not getattr(self.geo, "stages", None):
+                    self._logger.warning("No geometric chuck stages available to save")
+                    self._plugin_manager.send_plugin_message("roseengine", {"save_geo": "no_data"})
+                    return
+
+                rosette_dir = os.path.join(self._settings.getBaseFolder("uploads"), "rosette")
+                os.makedirs(rosette_dir, exist_ok=True)
+                file_path = os.path.join(rosette_dir, "saved_geos.json")
+
+                entry = {
+                    "timestamp": time.strftime("%Y-%m-%dT%H:%M:%S"),
+                    "type": "geometric",
+                    "periods": self.geo.required_periods() if hasattr(self.geo, "required_periods") else None,
+                    "stages": []
+                }
+                for st in self.geo.stages:
+                    phase_deg = float(math.degrees(st.phase)) if hasattr(st, "phase") else 0.0
+                    entry["stages"].append({
+                        "p": int(getattr(st, "p", 0)),
+                        "q": int(getattr(st, "q", 1)),
+                        "radius": float(getattr(st, "R", 0.0)),
+                        "phase": phase_deg
+                    })
+
+                # load existing array
+                if os.path.exists(file_path):
+                    with open(file_path, "r") as f:
+                        try:
+                            data = json.load(f)
+                            if not isinstance(data, list):
+                                data = []
+                        except Exception:
+                            data = []
+                else:
+                    data = []
+
+                data.append(entry)
+                with open(file_path, "w") as f:
+                    json.dump(data, f, indent=2)
+
+                self._logger.info(f"Saved geometric chuck entry to {file_path}")
+                self._plugin_manager.send_plugin_message("roseengine", {"save_geo": "ok", "path": file_path})
+            except Exception as e:
+                self._logger.error(f"Failed to save geometric chuck: {e}", exc_info=True)
+                self._plugin_manager.send_plugin_message("roseengine", {"save_geo": "error", "error": str(e)})
+            return
+           
         if command == "start_job":
             self.rpm = float(data["rpm"])
             self.r_amp = float(data["r_amp"])
