@@ -169,6 +169,7 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
             max_correct=10,
             min_correct=0.0001
 
+
             )
     
     def get_template_configs(self):
