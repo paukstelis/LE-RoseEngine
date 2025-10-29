@@ -44,6 +44,7 @@ $(function() {
         self.stages = ko.observableArray([]);
         self.geo_stages = ko.observable(2);
         self.geo_points = ko.observable(6000);
+        self.saved_geos = ko.observableArray([]);
 
         //Recording
         self.recording  = ko.observable(false);
@@ -94,11 +95,96 @@ $(function() {
             });
         }
 
+        self.fetchSavedGeos = function() {
+            // Use OctoPrint API to list files in the uploads/rosette location,
+            // then download the saved_geos.json file via its provided download ref.
+            OctoPrint.files.listForLocation("local/rosette", false)
+                .done(function(data) {
+                    var children = data && data.children ? data.children : [];
+                    // look for the JSON file we save to
+                    console.log(children);
+                    var savedFile = children.find(function(f) {
+                        return f.name === "saved_geos.json";
+                    });
+                    if (!savedFile) {
+                        console.log("No saved_geos.json found in uploads/rosette");
+                        self.saved_geos([]);
+                        return;
+                    }
+
+                    var downloadUrl = savedFile.refs && savedFile.refs.download;
+                    if (!downloadUrl) {
+                        console.log("Saved file has no download ref");
+                        self.saved_geos([]);
+                        return;
+                    }
+
+                    $.getJSON(downloadUrl)
+                        .done(function(data) {
+                            if (!Array.isArray(data)) {
+                                console.log("saved_geos.json not an array");
+                                data = [];
+                            }
+                            self.saved_geos(data);
+                            var sel = $("#saved_geo_select");
+                            if (sel.length) {
+                                sel.empty();
+                                sel.append($("<option>").text("Select saved geometric").attr("value",""));
+                                data.forEach(function(entry, i) {
+                                    var label = entry.timestamp ? entry.timestamp : ("entry " + i);
+                                    console.log(label);
+                                    if (entry.type) label = label + " (" + entry.type + ")";
+                                    sel.append($("<option>").text(label).attr("value", i));
+                                });
+                            }
+                        })
+                        .fail(function() {
+                            console.log("Failed to download saved_geos.json");
+                            self.saved_geos([]);
+                        });
+                })
+                .fail(function() {
+                    console.log("Failed to list uploads/rosette");
+                    self.saved_geos([]);
+                });
+        };
+
+        self.loadSavedGeo = function(index) {
+            var idx = parseInt(index, 10);
+            if (isNaN(idx)) return;
+            var entry = self.saved_geos()[idx];
+            if (!entry || !Array.isArray(entry.stages)) {
+                console.error("Invalid saved geo entry");
+                return;
+            }
+            // convert stages to the format expected by the plugin API
+            var stages = entry.stages.map(function(st) {
+                return {
+                    id: undefined,
+                    radius: st.radius,
+                    p: st.p,
+                    q: st.q,
+                    phase: st.phase  // saved phase is degrees; server code expects degrees then converts to radians
+                };
+            });
+            var samples = entry.samples ? entry.samples : self.geo_points();
+            OctoPrint.simpleApiCommand("roseengine", "geometric", { stages: stages, samples: samples })
+                .done(function() {
+                    console.log("Geometric data sent from saved entry");
+                })
+                .fail(function() {
+                    console.error("Failed to send saved geometric");
+                });
+        };
+
         self.onBeforeBinding = function () {
             self.settings = self.global_settings.settings.plugins.roseengine;
             self.is_printing(self.global_settings.settings.plugins.latheengraver.is_printing());
             self.is_operational(self.global_settings.settings.plugins.latheengraver.is_operational());
             //console.log(self.settings);
+
+            self.fetchSavedGeos();
+
             self.fetchProfileFiles();
             self.a_inc = self.settings.a_inc();
             self.geo_stages = self.settings.geo_stages();
@@ -147,6 +233,13 @@ $(function() {
 
             //console.log(self.available());
         };
+
+        $("#saved_geo_select").on("change", function() {
+                var val = $(this).val();
+                if (val !== "") {
+                    self.loadSavedGeo(val);
+                }
+            });
 
         $("#rock_file_select").on("change", function () {
             var filePath = $("#rock_file_select option:selected").attr("path");

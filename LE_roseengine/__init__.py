@@ -181,7 +181,7 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
         self.initialize()
 
     def get_extension_tree(self, *args, **kwargs):
-        return {'model': {'png': ["png", "jpg", "jpeg", "gif", "txt", "stl", "svg"]}}
+        return {'model': {'png': ["png", "jpg", "jpeg", "gif", "txt", "stl", "svg", "json"]}}
     ##~~ AssetPlugin mixin
 
     def get_assets(self):
