@@ -44,11 +44,17 @@ $(function() {
         self.stages = ko.observableArray([]);
         self.geo_stages = ko.observable(2);
         self.geo_points = ko.observable(6000);
+        self.saved_geos = ko.observableArray([]);
 
         //Recording
         self.recording  = ko.observable(false);
         self.lines = ko.observable(0); //number of lines written/stored
         self.relative_return = ko.observable(false);
+
+        //laser
+        self.laser_base = ko.observable(200);
+        self.laser_feed = ko.observable(200);
+        self.laser_mode = ko.observable(0);
 
         tab = document.getElementById("tab_plugin_roseengine_link");
         tab.innerHTML = tab.innerHTML.replaceAll("Roseengine Plugin", "Rose Engine");
@@ -89,11 +95,148 @@ $(function() {
             });
         }
 
+        self.fetchSavedGeos = function() {
+            // Use OctoPrint API to list files in the uploads/rosette location,
+            // then download the saved_geos.json file via its provided download ref.
+            OctoPrint.files.listForLocation("local/rosette", false)
+                .done(function(data) {
+                    var children = data && data.children ? data.children : [];
+                    // look for the JSON file we save to
+                    console.log(children);
+                    var savedFile = children.find(function(f) {
+                        return f.name === "saved_geos.json";
+                    });
+                    if (!savedFile) {
+                        console.log("No saved_geos.json found in uploads/rosette");
+                        self.saved_geos([]);
+                        return;
+                    }
+
+                    var downloadUrl = savedFile.refs && savedFile.refs.download;
+                    if (!downloadUrl) {
+                        console.log("Saved file has no download ref");
+                        self.saved_geos([]);
+                        return;
+                    }
+
+                    $.getJSON(downloadUrl)
+                        .done(function(data) {
+                            if (!Array.isArray(data)) {
+                                console.log("saved_geos.json not an array");
+                                data = [];
+                            }
+                            self.saved_geos(data);
+                            var sel = $("#saved_geo_select");
+                            if (sel.length) {
+                                sel.empty();
+                                sel.append($("<option>").text("Select saved geometric").attr("value",""));
+                                data.forEach(function(entry, i) {
+                                    var label = entry.timestamp ? entry.timestamp : ("entry " + i);
+                                    console.log(label);
+                                    if (entry.type) label = label + " (" + entry.type + ")";
+                                    sel.append($("<option>").text(label).attr("value", i));
+                                });
+                            }
+                        })
+                        .fail(function() {
+                            console.log("Failed to download saved_geos.json");
+                            self.saved_geos([]);
+                        });
+                })
+                .fail(function() {
+                    console.log("Failed to list uploads/rosette");
+                    self.saved_geos([]);
+                });
+        };
+
+        self.loadSavedGeo = function(index) {
+            var idx = parseInt(index, 10);
+            if (isNaN(idx)) return;
+            var entry = self.saved_geos()[idx];
+            if (!entry || !Array.isArray(entry.stages)) {
+                console.error("Invalid saved geo entry");
+                return;
+            }
+
+            // Populate KO observables so the user can see values
+            var numStages = entry.stages.length;
+            try {
+                // update geo_stages observable if present
+                if (ko.isObservable(self.geo_stages)) {
+                    self.geo_stages(numStages);
+                }
+
+                // ensure stages array has the correct shape
+                var current = self.stages() || [];
+                if (current.length !== numStages) {
+                    var stagesArr = [];
+                    for (var i = 0; i < numStages; i++) {
+                        stagesArr.push({
+                            id: i,
+                            radius: ko.observable(entry.stages[i].radius || 0),
+                            p: ko.observable(entry.stages[i].p || 0),
+                            q: ko.observable(entry.stages[i].q || 1),
+                            phase: ko.observable(entry.stages[i].phase || 0) // degrees
+                        });
+                    }
+                    self.stages(stagesArr);
+                } else {
+                    // reuse existing observables, just set values
+                    for (var j = 0; j < numStages; j++) {
+                        var src = entry.stages[j];
+                        var tgt = current[j];
+                        if (tgt.radius && ko.isObservable(tgt.radius)) tgt.radius(src.radius || 0);
+                        if (tgt.p && ko.isObservable(tgt.p)) tgt.p(src.p || 0);
+                        if (tgt.q && ko.isObservable(tgt.q)) tgt.q(src.q || 1);
+                        if (tgt.phase && ko.isObservable(tgt.phase)) tgt.phase(src.phase || 0);
+                    }
+                    // push updated array back to observableArray to notify bindings
+                    self.stages.valueHasMutated();
+                }
+
+                // populate samples / points observable if present
+                if (entry.samples && ko.isObservable(self.geo_points)) {
+                    self.geo_points(entry.samples);
+                }
+
+                // set select UI to chosen index if exists
+                var sel = $("#saved_geo_select");
+                if (sel.length) {
+                    sel.val(idx);
+                }
+
+            } catch (err) {
+                console.error("Failed to populate KO values from saved geo:", err);
+            }
+
+            // Optionally, send the geometric command to generate the pattern immediately
+            var stages = entry.stages.map(function(st) {
+                return {
+                    id: undefined,
+                    radius: st.radius,
+                    p: st.p,
+                    q: st.q,
+                    phase: st.phase
+                };
+            });
+            var samples = entry.samples ? entry.samples : ko.unwrap(self.geo_points);
+            OctoPrint.simpleApiCommand("roseengine", "geometric", { stages: stages, samples: samples })
+                .done(function() {
+                    console.log("Geometric data sent from saved entry");
+                })
+                .fail(function() {
+                    console.error("Failed to send saved geometric");
+                });
+        };
+
         self.onBeforeBinding = function () {
             self.settings = self.global_settings.settings.plugins.roseengine;
             self.is_printing(self.global_settings.settings.plugins.latheengraver.is_printing());
             self.is_operational(self.global_settings.settings.plugins.latheengraver.is_operational());
             //console.log(self.settings);
+
+            self.fetchSavedGeos();
+
             self.fetchProfileFiles();
             self.a_inc = self.settings.a_inc();
             self.geo_stages = self.settings.geo_stages();
@@ -116,17 +259,21 @@ $(function() {
             var po = $('#po_span');
             var po_slider = $('#pump_offset');
             po_slider.attr("step", self.a_inc);
+        };
 
+        self.fromCurrentData = function(data) {
+            self._processStateData(data.state);
+        };
 
-            
-
+        self.fromHistoryData = function(data) {
+            self._processStateData(data.state);
         };
 
         self._processStateData = function(data) {
             
             self.is_printing(data.flags.printing);
             self.is_operational(data.flags.operational);
-            self.isLoading(data.flags.loading);
+            //self.isLoading(data.flags.loading);
             
             if (self.is_printing() && !self.running()) {
               self.available(false);
@@ -136,8 +283,15 @@ $(function() {
                 self.available(true);
             }
 
-            console.log(self.available());
+            //console.log(self.available());
         };
+
+        $("#saved_geo_select").on("change", function() {
+                var val = $(this).val();
+                if (val !== "") {
+                    self.loadSavedGeo(val);
+                }
+            });
 
         $("#rock_file_select").on("change", function () {
             var filePath = $("#rock_file_select option:selected").attr("path");
@@ -293,6 +447,10 @@ $(function() {
 
         };
 
+        self.onEventPLUGIN_LATHEENGRAVER_SEND_LASER = function(payload) {
+            console.log("Got laser event");
+        };
+
         self.onDataUpdaterPluginMessage = function(plugin, data) {
 
             if (plugin == 'roseengine' && data.seticon == 'rec') {
@@ -345,6 +503,11 @@ $(function() {
             if (plugin == 'roseengine' && data.func == 'refresh') {
                 self.fetchProfileFiles();
             }
+
+            if (plugin == 'roseengine' && data.laser_mode != 'undefined') {
+                self.laser_mode(data.laser_mode);
+                //console.log("Laser mode set");
+            }
         };
 
         self.send_error_messasge = function(message) {
@@ -382,12 +545,22 @@ $(function() {
 
         };
 
+        self.save_geo = function() {
+            OctoPrint.simpleApiCommand("roseengine", "save_geo")
+                .done(function(response) {
+                    console.log("Geometric data saved");
+                })
+                .fail(function() {
+                    console.error("Save failed");
+                });
+        };
+        
         self.create_geo = function(randomize) {
             var stages_data = self.stages().map(function(stage, idx) {
                 if (randomize) {
-                    var radius = Math.floor(Math.random() * 100) + 1;
-                    var p = Math.floor(Math.random() * 81) - 40;
-                    var q = Math.floor(Math.random() * 81) - 40;
+                    var radius = Math.floor(Math.random() * 50) + 1;
+                    var p = Math.floor(Math.random() * 21) - 10;
+                    var q = Math.floor(Math.random() * 21) - 10;
                     var phase = 0;
 
                     // Update the knockout observables so UI reflects the random values
@@ -412,7 +585,7 @@ $(function() {
                         phase: ko.unwrap(stage.phase)
                     };
                 }
-        });
+            });
             console.log(stages_data);
             OctoPrint.simpleApiCommand("roseengine", "geometric", { stages: stages_data, samples: self.geo_points })
                 .done(function(response) {
@@ -439,6 +612,17 @@ $(function() {
                 });
 
         };
+
+        self.toggle_laser = function() {
+
+            OctoPrint.simpleApiCommand("roseengine", "laser")
+                .done(function(response) {
+                    console.log("Laser toggle sent");
+                })
+                .fail(function() {
+                    console.error("Laser toggle failed");
+                });
+        }
 
         self.record = function(operation) {
             var data = {
@@ -529,6 +713,8 @@ $(function() {
                 e_ratio: self.e_ratio(),
                 b_adjust: self.b_adjust(),
                 bref: self.bref(),
+                laser_base: self.laser_base(),
+                laser_feed: self.laser_feed(),
                
 
             };
@@ -677,9 +863,6 @@ $(function() {
                     button.click();
                 }
             }
-                
-            
-
         };
 
         $(document).ready(function() {
@@ -705,7 +888,7 @@ $(function() {
 
     OCTOPRINT_VIEWMODELS.push({
         construct: RoseengineViewModel,
-        dependencies: ["settingsViewModel", "filesViewModel",  "accessViewModel","loginStateViewModel"],
-        elements: [ "#tab_plugin_roseengine","#settings_plugin_roseengine" ]
+        dependencies: ["settingsViewModel", "filesViewModel",  "accessViewModel","loginStateViewModel",],
+        elements: [ "#tab_plugin_roseengine", ]
     });
 });
