@@ -191,8 +191,13 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
         }
     
     def on_event(self, event, payload):
+        
         if event == "plugin_latheengraver_send_position":
             self.get_position(event, payload)
+        if event == "plugin_latheengraver_send_laser":
+            self._logger.info(payload)
+            self.laser_mode = payload["laser_mode"]
+            self._plugin_manager.send_plugin_message("roseengine", payload)
         if event == "UpdateFiles":
             #get all file lists
             data = dict(
@@ -528,7 +533,7 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
             loop_end = None
             cmdlist = []
             cmdlist.append("G92 A0")
-            if self.laser_start:
+            if self.laser_mode and self.laser_start:
                 lc = "M4"
                 if self.use_m3:
                     lc="M3"
@@ -577,7 +582,7 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
                             z = -z*math.sin(bangle) + z*math.cos(bangle)
                         track_z = track_z + z
                         cmdlist.append(f"G93 G91 G1 X{x:0.3f} A{a:0.3f} Z{z:0.3f} F{feed:0.1f}")
-                        if self.laser:
+                        if self.laser_mode and self.laser:
                             #calculate the chunk distance
                             arc = track_z * math.radians(a)
                             chunk_distance = chunk_distance + math.sqrt(arc**2 + x**2 + z**2)
@@ -672,7 +677,7 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
             loop_end = None
             cmdlist = []
             cmdlist.append("G92 A0")
-            if self.laser_start:
+            if self.laser_mode and self.laser_start:
                 lc = "M4"
                 if self.use_m3:
                     lc="M3"
@@ -733,7 +738,7 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
                             z = -z*math.sin(bangle) + z*math.cos(bangle)
                             #self._logger.info(f"modified x, z: {x} {z}")
                         track_z = track_z + z
-                        if self.laser:
+                        if self.laser_mode and self.laser:
                             #calculate the chunk distance
                             arc = track_z * math.radians(self.a_inc)
                             chunk_distance = chunk_distance + math.sqrt(arc**2 + x**2 + z**2)
@@ -755,7 +760,7 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
                     
                     #All modifications should be PRE injection
                     if self.inject:
-                        if not isinstance(self.inject,tuple) and self.inject.startswith("S"):
+                        if not isinstance(self.inject,tuple) and self.inject.startswith("S") and self.laser_mode:
                             m = re.search(r"S\s*=?\s*([0-9]+)", self.inject, re.IGNORECASE)
                             if m:
                                 val = int(m.group(1))
@@ -1139,6 +1144,7 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
                     "timestamp": time.strftime("%Y-%m-%dT%H:%M:%S"),
                     "type": "geometric",
                     "periods": self.geo.required_periods() if hasattr(self.geo, "required_periods") else None,
+                    "samples": self.geo_points,
                     "stages": []
                 }
                 for st in self.geo.stages:
@@ -1167,10 +1173,10 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
                     json.dump(data, f, indent=2)
 
                 self._logger.info(f"Saved geometric chuck entry to {file_path}")
-                self._plugin_manager.send_plugin_message("roseengine", {"save_geo": "ok", "path": file_path})
+                #self._plugin_manager.send_plugin_message("roseengine", {"save_geo": "ok", "path": file_path})
             except Exception as e:
                 self._logger.error(f"Failed to save geometric chuck: {e}", exc_info=True)
-                self._plugin_manager.send_plugin_message("roseengine", {"save_geo": "error", "error": str(e)})
+                #self._plugin_manager.send_plugin_message("roseengine", {"save_geo": "error", "error": str(e)})
             return
            
         if command == "start_job":

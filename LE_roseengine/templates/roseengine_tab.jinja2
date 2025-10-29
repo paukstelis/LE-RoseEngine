@@ -147,8 +147,8 @@
                     </div>
                     <div>
                         <button id="create_geo" class="btn" data-bind="click: function() {create_geo(false)}"> Create</button>
-                        <button id="clear_geo" class="btn" data-bind="click: function() {clear_rosette('rock')}"> Clear</button>
                         <button id="geo_random" class="btn" data-bind="click: function() {create_geo(true)}">Random</button>
+                        <button id="geo_save" class="btn" data-bind="click: function() {save_geo()}">Save Geo</button>
                     </div>
                 </details>
             </div>
@@ -213,7 +213,7 @@
                             <i class="fa fa-arrow-left"></i>
                         </button>
 
-                        <button id="laser" class="btn box" style="border: 1px solid; width: 40px; height: 40px;" data-bind="click: function() {toggle_laser()}">
+                        <button id="laser" class="btn box" style="border: 1px solid; width: 40px; height: 40px;" data-bind="enable: laser_mode() && is_operational(), click: function() {toggle_laser()}">
                             <i class="fa fa-bullseye"></i>
                         </button>
 
@@ -238,7 +238,7 @@
                 </tbody>
             </table>    
             </div>
-            <div>
+            <div id=laser_numbers data-bind="visible: laser_mode">
                 <label title="The base laser power, 0 to 1000" for="laser_power">Laser Power:</label>
                 <input id="laser_power" type="number" max="1000" value="1" step="1" data-bind="value: laser_base">
 

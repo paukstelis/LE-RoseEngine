@@ -1,6 +1,7 @@
 import math
 import numpy as np
 import logging
+from fractions import Fraction
 class Stage:
     def __init__(self, radius, p, q, phase=0.0, translation=0.0):
         # p or q may be negative to indicate inverted direction (previously 'internal')
@@ -45,12 +46,14 @@ class GeometricChuck:
     def required_periods(self):
         if not self.stages:
             return 1
-        qs = [abs(st.q) if st.q != 0 else 1 for st in self.stages]
-        l = 1
-        for q in qs:
-            l = math.lcm(l, q)
-        return l if l > 0 else 1
-
+        multipliers = self._angle_multipliers()
+        # Convert to Fractions for accurate LCM calculation
+        fracs = [Fraction(m).limit_denominator(1000) for m in multipliers]
+        denoms = [abs(frac.denominator) for frac in fracs]
+        # Remove duplicates and dependent multiples
+        unique_denoms = set(denoms)
+        return math.lcm(*unique_denoms)
+    
     def generate_xy(self, num_points=2000, t_range=(0.0, 2*np.pi)):
         if not self.stages:
             raise ValueError("No stages added.")

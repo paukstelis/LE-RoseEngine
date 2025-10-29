@@ -53,7 +53,7 @@ $(function() {
         //laser
         self.laser_base = ko.observable(200);
         self.laser_feed = ko.observable(200);
-        self.laser_mode = ko.observable(false);
+        self.laser_mode = ko.observable(0);
 
         tab = document.getElementById("tab_plugin_roseengine_link");
         tab.innerHTML = tab.innerHTML.replaceAll("Roseengine Plugin", "Rose Engine");
@@ -135,7 +135,7 @@ $(function() {
             
             self.is_printing(data.flags.printing);
             self.is_operational(data.flags.operational);
-            self.isLoading(data.flags.loading);
+            //self.isLoading(data.flags.loading);
             
             if (self.is_printing() && !self.running()) {
               self.available(false);
@@ -145,7 +145,7 @@ $(function() {
                 self.available(true);
             }
 
-            console.log(self.available());
+            //console.log(self.available());
         };
 
         $("#rock_file_select").on("change", function () {
@@ -302,6 +302,10 @@ $(function() {
 
         };
 
+        self.onEventPLUGIN_LATHEENGRAVER_SEND_LASER = function(payload) {
+            console.log("Got laser event");
+        };
+
         self.onDataUpdaterPluginMessage = function(plugin, data) {
 
             if (plugin == 'roseengine' && data.seticon == 'rec') {
@@ -354,6 +358,11 @@ $(function() {
             if (plugin == 'roseengine' && data.func == 'refresh') {
                 self.fetchProfileFiles();
             }
+
+            if (plugin == 'roseengine' && data.laser_mode != 'undefined') {
+                self.laser_mode(data.laser_mode);
+                //console.log("Laser mode set");
+            }
         };
 
         self.send_error_messasge = function(message) {
@@ -391,12 +400,22 @@ $(function() {
 
         };
 
+        self.save_geo = function() {
+            OctoPrint.simpleApiCommand("roseengine", "save_geo")
+                .done(function(response) {
+                    console.log("Geometric data saved");
+                })
+                .fail(function() {
+                    console.error("Save failed");
+                });
+        };
+        
         self.create_geo = function(randomize) {
             var stages_data = self.stages().map(function(stage, idx) {
                 if (randomize) {
-                    var radius = Math.floor(Math.random() * 100) + 1;
-                    var p = Math.floor(Math.random() * 81) - 40;
-                    var q = Math.floor(Math.random() * 81) - 40;
+                    var radius = Math.floor(Math.random() * 50) + 1;
+                    var p = Math.floor(Math.random() * 21) - 10;
+                    var q = Math.floor(Math.random() * 21) - 10;
                     var phase = 0;
 
                     // Update the knockout observables so UI reflects the random values
@@ -421,7 +440,7 @@ $(function() {
                         phase: ko.unwrap(stage.phase)
                     };
                 }
-        });
+            });
             console.log(stages_data);
             OctoPrint.simpleApiCommand("roseengine", "geometric", { stages: stages_data, samples: self.geo_points })
                 .done(function(response) {
