@@ -157,17 +157,69 @@ $(function() {
                 console.error("Invalid saved geo entry");
                 return;
             }
-            // convert stages to the format expected by the plugin API
+
+            // Populate KO observables so the user can see values
+            var numStages = entry.stages.length;
+            try {
+                // update geo_stages observable if present
+                if (ko.isObservable(self.geo_stages)) {
+                    self.geo_stages(numStages);
+                }
+
+                // ensure stages array has the correct shape
+                var current = self.stages() || [];
+                if (current.length !== numStages) {
+                    var stagesArr = [];
+                    for (var i = 0; i < numStages; i++) {
+                        stagesArr.push({
+                            id: i,
+                            radius: ko.observable(entry.stages[i].radius || 0),
+                            p: ko.observable(entry.stages[i].p || 0),
+                            q: ko.observable(entry.stages[i].q || 1),
+                            phase: ko.observable(entry.stages[i].phase || 0) // degrees
+                        });
+                    }
+                    self.stages(stagesArr);
+                } else {
+                    // reuse existing observables, just set values
+                    for (var j = 0; j < numStages; j++) {
+                        var src = entry.stages[j];
+                        var tgt = current[j];
+                        if (tgt.radius && ko.isObservable(tgt.radius)) tgt.radius(src.radius || 0);
+                        if (tgt.p && ko.isObservable(tgt.p)) tgt.p(src.p || 0);
+                        if (tgt.q && ko.isObservable(tgt.q)) tgt.q(src.q || 1);
+                        if (tgt.phase && ko.isObservable(tgt.phase)) tgt.phase(src.phase || 0);
+                    }
+                    // push updated array back to observableArray to notify bindings
+                    self.stages.valueHasMutated();
+                }
+
+                // populate samples / points observable if present
+                if (entry.samples && ko.isObservable(self.geo_points)) {
+                    self.geo_points(entry.samples);
+                }
+
+                // set select UI to chosen index if exists
+                var sel = $("#saved_geo_select");
+                if (sel.length) {
+                    sel.val(idx);
+                }
+
+            } catch (err) {
+                console.error("Failed to populate KO values from saved geo:", err);
+            }
+
+            // Optionally, send the geometric command to generate the pattern immediately
             var stages = entry.stages.map(function(st) {
                 return {
                     id: undefined,
                     radius: st.radius,
                     p: st.p,
                     q: st.q,
-                    phase: st.phase  // saved phase is degrees; server code expects degrees then converts to radians
+                    phase: st.phase
                 };
             });
-            var samples = entry.samples ? entry.samples : self.geo_points();
+            var samples = entry.samples ? entry.samples : ko.unwrap(self.geo_points);
             OctoPrint.simpleApiCommand("roseengine", "geometric", { stages: stages, samples: samples })
                 .done(function() {
                     console.log("Geometric data sent from saved entry");
