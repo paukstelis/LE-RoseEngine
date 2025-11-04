@@ -91,9 +91,11 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
         self.geo = geometric.GeometricChuck()
         self.geo_radii = None
         self.geo_angles = None
+        self.geo_depth = None
         self.geo_points = 6000
         self.geo_thresh = 500
         self.geo_interp = 6000
+        self.radial_depth = 0
 
         #laser
         self.laser_mode = False
@@ -182,7 +184,7 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
         self.initialize()
 
     def get_extension_tree(self, *args, **kwargs):
-        return {'model': {'png': ["png", "jpg", "jpeg", "gif", "txt", "stl", "svg", "json"]}}
+        return {'model': {'png': ["png", "jpg", "jpeg", "gif", "txt", "stl", "svg", "json", "clr"]}}
     ##~~ AssetPlugin mixin
 
     def get_assets(self):
@@ -283,15 +285,6 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
         angles = np.roll(angles, -max_idx)
         self._logger.debug(radii)
         self._logger.debug(angles)
-        #radii = radii[:-1]
-        #angles = angles[:-1]
-        # Offset angles so first is 0
-        #angle_offset = angles[0]
-        #angles = (angles - angle_offset) % 360
-
-        #if not np.isclose(angles[-1], 360):
-        #    angles = np.append(angles, 360.0)
-        #    radii = np.append(radii, radii[0])
             
         rosette = {
             "radii": radii,
@@ -429,17 +422,51 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
 
     def load_rosette(self, filepath):
         folder = self._settings.getBaseFolder("uploads")
-        filename = f"{folder}/{filepath}"
-        paths, attributes = svg2paths(filename)
-        path = paths[0]  # assume single path
-        center = None
+        #filename = f"{folder}/{filepath}"
+        filename = os.path.join(folder, filepath)
+        ext = os.path.splitext(filename)[1].lower()
+        radii = []
+        angles = []
         special_case = False
-        for a in attributes:
-            if a["id"] == "center":
-                center = (float(a["cx"]), float(a["cy"]))
-                break
 
-        angles, radii = self.resample_path_to_polar(path, center)
+        if ext == ".clr":
+            try:
+                angles = []
+                radii = []
+                with open(filename, "r") as f:
+                    lines = f.readlines()
+                # ignore first line (header) and parse subsequent lines
+                for line in lines[1:]:
+                    line = line.strip()
+                    if not line:
+                        continue
+                    parts = re.split(r'\s+', line)
+                    if len(parts) < 2:
+                        continue
+                    try:
+                        ang = float(parts[0])
+                        rad = 25.4 * float(parts[1])
+                    except ValueError:
+                        continue
+                    angles.append(ang)
+                    radii.append(rad)
+                if not angles:
+                    raise ValueError("No numeric data found in CLR file")
+                
+            except Exception as e:
+                self._logger.error(f"Failed to read/parse CLR file {filename}: {e}", exc_info=True)
+                raise
+
+        if ext == ".svg":
+            paths, attributes = svg2paths(filename)
+            path = paths[0]  # assume single path
+            center = None
+            for a in attributes:
+                if a["id"] == "center":
+                    center = (float(a["cx"]), float(a["cy"]))
+                    break
+
+            angles, radii = self.resample_path_to_polar(path, center)
         
         radii = np.array(radii)
         angles = np.array(angles)
@@ -474,6 +501,7 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
         max_radius = np.max(radii)
         min_radius = np.min(radii)
         self._logger.debug(f"First/last radii/angle: {radii[0]} {angles[0]} {radii[-1]} {angles[-1]}")
+        
         expected_points = int(360 / self.a_inc)
         uniform_angles = np.arange(0, 360, self.a_inc)
 
@@ -501,6 +529,9 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
             angles = np.round(angles, 6)
             self._logger.debug(f"Post-interp first_angle={angles[0]}, first_radius={radii[0]:.3f}")
         
+        elif len(angles) > expected_points and ext == ".svg":
+            special_case = True
+
         rosette = {
             "radii": radii,
             "angles": angles,
@@ -571,12 +602,13 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
                     feed = (360/avg_a_inc) * self.rpm
                     rchunk = self.geo_radii[i:i+self.chunk]
                     achunk = self.geo_angles[i:i+self.chunk]
+                    xchunk = self.geo_depth[i:i+self.chunk]
                     chunk_distance = 0
-                    
+                                        
                     for c in range(0, len(rchunk)):
                         a = achunk[c]
                         z = rchunk[c]
-                        x = 0
+                        x = xchunk[c]
                         if self.b_adjust:
                             bangle = math.radians(self.current_b - self.bref) *-1
                             x = x*math.cos(bangle) + z*math.sin(bangle)
@@ -877,7 +909,24 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
 
         self.geo_radii = radius_diffs
         self.geo_angles = angle_diffs
+        self.geo_depth = np.zeros_like(self.geo_radii)
+        
+        if self.radial_depth:
+            max_r = np.max(new_radii)
+            depth_vals = np.zeros_like(self.geo_radii, dtype=float)
 
+            for idx, z in enumerate(new_radii):
+                if max_r and max_r != 0:
+                    frac = z / max_r
+                    if self.radial_depth < 0:
+                        x = frac * self.radial_depth
+                    else:
+                        x = - (1.0 - frac) * (self.radial_depth)
+                depth_vals[idx] = x
+            if depth_vals.size:
+                depth_diffs = np.roll(depth_vals, -1) - depth_vals
+                self.geo_depth = depth_diffs
+                self._logger.debug(self.geo_depth)
         self._logger.debug("Geo radii diffs: %s", self.geo_radii)
         self._logger.debug("Geo angle diffs: %s", self.geo_angles)
 
@@ -1190,7 +1239,8 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
             self.b_adjust = bool(data["b_adjust"])
             self.bref = float(data["bref"])
             self.laser_base = int(data["laser_base"]) #should these be dynamic?
-            self.laser_feed = int(data["laser_feed"]) 
+            self.laser_feed = int(data["laser_feed"])
+            self.radial_depth = float(data["radial_depth"]) 
             self._logger.info("ready to start job")
             if float(data["e_ratio"]) > 1.0 and not self.rock_main["type"] == "geometric":
                 rad = float(data["e_rad"])

@@ -45,6 +45,7 @@ $(function() {
         self.geo_stages = ko.observable(2);
         self.geo_points = ko.observable(6000);
         self.saved_geos = ko.observableArray([]);
+        self.radial_depth = ko.observable(0.0);
 
         //Recording
         self.recording  = ko.observable(false);
@@ -715,6 +716,7 @@ $(function() {
                 bref: self.bref(),
                 laser_base: self.laser_base(),
                 laser_feed: self.laser_feed(),
+                radial_depth: self.radial_depth(),
                
 
             };
