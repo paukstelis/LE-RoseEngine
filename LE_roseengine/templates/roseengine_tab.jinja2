@@ -151,6 +151,10 @@
                         <button id="geo_save" class="btn" data-bind="click: function() {save_geo()}">Save Geo</button>
                     </div>
                     <div>
+                        <label for="radial_depth" title="Adjust depth of cut based on radius. Positive values will cut deeper at the center, negative values will cut deeper at the max radius" >Radial depth (mm):</label>
+                        <input class="span4" id="radial_depth" type="number" step="any" data-bind="value: radial_depth">
+                    </div>
+                    <div>
                         <label>Saved Geometrics:</label>
                             <select id="saved_geo_select" data-bind="">
                         </select>
