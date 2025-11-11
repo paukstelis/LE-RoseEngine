@@ -89,8 +89,8 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
 
         #geometric chuck
         self.geo = geometric.GeometricChuck()
-        self.geo_radii = None
-        self.geo_angles = None
+        self.geo_radii = []
+        self.geo_angles = []
         self.geo_depth = None
         self.geo_points = 6000
         self.geo_thresh = 500
