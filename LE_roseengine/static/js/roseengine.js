@@ -47,6 +47,9 @@ $(function() {
         self.saved_geos = ko.observableArray([]);
         self.radial_depth = ko.observable(0.0);
 
+        //Profiles
+        //self.pump_profile = ko.observable()
+
         //Recording
         self.recording  = ko.observable(false);
         self.lines = ko.observable(0); //number of lines written/stored
@@ -59,13 +62,24 @@ $(function() {
 
         tab = document.getElementById("tab_plugin_roseengine_link");
         tab.innerHTML = tab.innerHTML.replaceAll("Roseengine Plugin", "Rose Engine");
-        // assign the injected parameters, e.g.:
-        // self.loginStateViewModel = parameters[0];
-        // self.settingsViewModel = parameters[1];
 
-        // TODO: Implement your plugin's view model here.
-        // Fetch the list of .svg files from the uploads/rosette directory
         self.fetchProfileFiles = function() {
+            OctoPrint.files.listForLocation("local/scans", false)
+                .done(function(data) {
+                    var scans = data.children || [];
+                    // keep only files whose name starts with "X"
+                    scans = scans.filter(function(f) {
+                        return typeof f.name === "string" && f.name.startsWith("X");
+                    });
+                    //self.scans = scans;
+                    populateFileSelector(scans, "#scan_pump_select", "machinecode");
+                })
+                .fail(function() {
+                    console.error("Failed to fetch scan files");
+                });
+        };
+
+        self.fetchRosetteFiles = function() {
             OctoPrint.files.listForLocation("local/rosette", false)
                 .done(function(data) {
                     var rosettes = data.children;
@@ -74,7 +88,6 @@ $(function() {
                     self.rosettes = rosettes;
                     populateFileSelector(rosettes, "#rock_file_select", "machinecode");
                     populateFileSelector(rosettes, "#pump_file_select", "machinecode");
-
                 })
                 .fail(function() {
                     console.error("Failed to fetch svg files.");
@@ -84,7 +97,7 @@ $(function() {
         function populateFileSelector(files, elem, type) {
             var fileSelector = $(elem);
             fileSelector.empty();
-            fileSelector.append($("<option>").text("Select file").attr("value", ""));
+            fileSelector.append($("<option>").text("Select file").attr("value", "None"));
             files.forEach(function(file, i) {
                 var option = $("<option>")
                     .text(file.display)
@@ -235,10 +248,11 @@ $(function() {
             self.is_printing(self.global_settings.settings.plugins.latheengraver.is_printing());
             self.is_operational(self.global_settings.settings.plugins.latheengraver.is_operational());
             //console.log(self.settings);
-
+            self.pump_profile = "None";
             self.fetchSavedGeos();
 
             self.fetchProfileFiles();
+            self.fetchRosetteFiles();
             self.a_inc = self.settings.a_inc();
             self.geo_stages = self.settings.geo_stages();
             self.geo_points = self.settings.geo_points();
@@ -293,6 +307,21 @@ $(function() {
                     self.loadSavedGeo(val);
                 }
             });
+
+        $("#scan_pump_select").on("change", function () {
+            var filePath = $("#scan_pump_select option:selected").attr("path");
+            var val = $("#scan_pump_select option:selected").attr("value");
+            if (!filePath) {
+                val = "none";
+            }
+            if (val === "none") {
+                filePath = "None";
+            }
+
+            self.pump_profile = filePath;
+            console.log(self.pump_profile);
+            
+        });
 
         $("#rock_file_select").on("change", function () {
             var filePath = $("#rock_file_select option:selected").attr("path");
@@ -503,9 +532,11 @@ $(function() {
 
             if (plugin == 'roseengine' && data.func == 'refresh') {
                 self.fetchProfileFiles();
+                self.fetchRosetteFiles();
             }
 
-            if (plugin == 'roseengine' && data.laser_mode != 'undefined') {
+            if (plugin == 'roseengine' && data.laser_mode === 0 || data.laser_mode === 1 ) {
+                console.log(data);
                 self.laser_mode(data.laser_mode);
                 //console.log("Laser mode set");
             }
@@ -698,6 +729,7 @@ $(function() {
                 });
 
             self.fetchProfileFiles();
+            self.fetchRosetteFiles();
 
         };
 
@@ -717,6 +749,7 @@ $(function() {
                 laser_base: self.laser_base(),
                 laser_feed: self.laser_feed(),
                 radial_depth: self.radial_depth(),
+                pump_profile: self.pump_profile,
                
 
             };

@@ -27,6 +27,7 @@ import shutil
 from svgpathtools import *
 from itertools import zip_longest
 from . import geometric
+from . import profiles
 import json
 class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
     octoprint.plugin.AssetPlugin,
@@ -86,6 +87,12 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
         self.pump_para = False
 
         self.ellipse = None
+
+        self.use_scan = None
+        self.scan_file = None
+        self.spline = None
+        self.a_spline = None
+        self.pump_profile = None
 
         #geometric chuck
         self.geo = geometric.GeometricChuck()
@@ -276,14 +283,18 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
             return
         angles = np.unwrap(angles)
         angles = np.degrees(angles)
-        
+        self._logger.debug("Unrolled angles:")
+        self._logger.debug(angles)
         #calculate min, max
         max_radius = np.max(radii)
         min_radius = np.min(radii)
         max_idx = np.argmax(radii)
-        radii = np.roll(radii, -max_idx)
-        angles = np.roll(angles, -max_idx)
+        #These have been commmented out as it appears this leads to large angular shifts, particular when using phasing
+        #the downside is that some designs may not start at max radius
+        #radii = np.roll(radii, -max_idx)
+        #angles = np.roll(angles, -max_idx)
         self._logger.debug(radii)
+        self._logger.debug("Rolled angles")
         self._logger.debug(angles)
             
         rosette = {
@@ -564,7 +575,7 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
             loop_start = None
             loop_end = None
             cmdlist = []
-            cmdlist.append("G92 A0")
+            #cmdlist.append("G92 A0")
             if self.laser_mode and self.laser_start:
                 lc = "M4"
                 if self.use_m3:
@@ -709,7 +720,8 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
             loop_start = None
             loop_end = None
             cmdlist = []
-            cmdlist.append("G92 A0")
+            #cmdlist.append("G92 A0")
+            ovality_z = 0 #this is how far we have already moved Z at any point
             if self.laser_mode and self.laser_start:
                 lc = "M4"
                 if self.use_m3:
@@ -719,7 +731,8 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
             #cmdlist.append("M3 S1000")
             if len(phasecmds):
                 cmdlist.extend(phasecmds)
-            track_z = self.start_coords["z"]
+            track = {"x": self.start_coords["x"], "z": self.start_coords["z"], "a": self.start_coords["a"]}
+            #track_z = self.start_coords["z"]
             while self.running:
                 #A-axis reset
                 #cmdlist.append("G92 A0")
@@ -754,14 +767,33 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
                     cmdchunk = self.working[i:i+self.chunk]
                     chunk_distance = 0
                     current_angle = i * self.a_inc
+                    
                     for cmd in cmdchunk:
                         x = cmd[1]
                         z = cmd[0]
                         mod = cmd[2]
+
+                        track["z"] = track["z"] + z
+                        track["x"] = track["x"] + x
+                        if dir:
+                            track["a"] = track["a"] - self.a_inc
+                        else:
+                            track["a"] = track["a"] + self.a_inc
+                            
                         #modify z values if we have elliptical chuck setting
                         if self.ellipse:
                             z = z + mod
                         current_angle = current_angle + self.a_inc
+
+                        if self.use_scan:
+                            #just assume we are doing pumping
+                            zdiff = profiles.ovality_mod(self,track["x"],track["a"])
+                            tx = track["x"]
+                            ta = track["a"]
+                            delta_ov = zdiff - ovality_z
+                            z = z + delta_ov
+                            ovality_z = zdiff
+                            #self._logger.info(f"Zdiff is {zdiff} delta_ov is {delta_ov}")
 
                         if self.b_adjust:
                             #self._logger.info(f"initial x, z: {x} {z}")
@@ -770,10 +802,10 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
                             x = x*math.cos(bangle) + z*math.sin(bangle)
                             z = -z*math.sin(bangle) + z*math.cos(bangle)
                             #self._logger.info(f"modified x, z: {x} {z}")
-                        track_z = track_z + z
+                        
                         if self.laser_mode and self.laser:
                             #calculate the chunk distance
-                            arc = track_z * math.radians(self.a_inc)
+                            arc = track["z"] * math.radians(self.a_inc)
                             chunk_distance = chunk_distance + math.sqrt(arc**2 + x**2 + z**2)
 
                         cmdlist.append(f"G93 G91 G1 A{dir}{self.a_inc} X{x:0.3f} Z{z:0.3f} F{feed:0.1f}")
@@ -852,7 +884,7 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
         self._logger.debug("Starting geometric job")
         self.start_coords["x"] = self.current_x
         self.start_coords["z"] = self.current_z
-        self.start_coords["a"] = 0.0
+        self.start_coords["a"] = self.current_a
         self.running = True
 
         radii = np.array(self.rock_main["radii"])
@@ -891,9 +923,9 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
             for each in angle_diffs:
                 self._logger.debug(each)
 
-        large_jumps = np.where(np.abs(angle_diffs) > 90)[0]
+        large_jumps = np.where(np.abs(angle_diffs) > 360)[0]
         if large_jumps.size > 0:
-            self._logger.info(f"Large angle diff (>90 deg) at indices: {large_jumps}, values: {angle_diffs[large_jumps]}")
+            self._logger.info(f"Large angle diff (>178 deg) at indices: {large_jumps}, values: {angle_diffs[large_jumps]}")
             msg=dict(title="Design Problem",
                       text="This design has a large angular jump. This is a known bug. Recreate your design with a fewer number of sample points.",
                       type="warning")
@@ -963,12 +995,13 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
         self.working = np.array(self.working)
         self.start_coords["x"] = self.current_x
         self.start_coords["z"] = self.current_z
-        self.start_coords["a"] = 0.0
+        self.start_coords["a"] = self.current_a
         self.running = True
         self._logger.debug(self.working)
         self.jobThread = threading.Thread(target=self._job_thread).start()
 
     def _reset_gcode(self):
+        self.pump_profile = None
         gcode = []
         return_gcode = []
         #reset A modulo
@@ -988,29 +1021,29 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
                     self._logger.debug("current_x > than x")
                     gcode.append(f"G94 G91 G1 X5 F1000")
                     gcode.append(f"G90 G0 Z{z} A{a}")
-                    return_gcode.append(f"G90 G0 SC_Z A0")
+                    return_gcode.append(f"G90 G0 SC_Z A{a}")
                     gcode.append(f"G90 G0 X{x}")
                     return_gcode.append(f"G90 G0 SC_X")
                 else:
                     gcode.append(f"G94 G90 G0 Z{z} X{x}")
                     return_gcode.append(f"G94 G90 G0 SC_Z SC_X")
-                    gcode.append(f"G0 A0")
-                    return_gcode.append("G0 A0")
+                    gcode.append(f"G0 A{a}")
+                    return_gcode.append("G0 A{a}")
             else:
                 gcode.append(f"G94 G90 G0 X{x}")
                 return_gcode.append(f"G94 G90 G0 SC_X")
                 gcode.append(f"G90 G0 Z{z} A{a}")
-                return_gcode.append(f"G90 G0 SC_Z A0")
+                return_gcode.append(f"G90 G0 SC_Z A{a}")
         if len(self.pump_work) and not len(self.rock_work):
             gcode.append(f"G94 G90 G0 Z{z}")
             gcode.append(f"G0 X{x} A{a}")
             return_gcode.append(f"G94 G90 G0 SC_Z")
-            return_gcode.append(f"G0 SC_X A0")
+            return_gcode.append(f"G0 SC_X A{a}")
         if len(self.pump_work) and len(self.rock_work):
             gcode.append(f"G94 G90 G0 Z{z} X{x}")
-            gcode.append(f"G0 A0")
+            gcode.append(f"G0 A{a}")
             return_gcode.append(f"G94 G90 G0 SC_Z SC_X")
-            return_gcode.append(f"G0 A0")
+            return_gcode.append(f"G0 A{a}")
         gcode.append("STOPCAP")
         gcode.append("M30")
         self.reset_cmds = False
@@ -1240,7 +1273,8 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
             self.bref = float(data["bref"])
             self.laser_base = int(data["laser_base"]) #should these be dynamic?
             self.laser_feed = int(data["laser_feed"])
-            self.radial_depth = float(data["radial_depth"]) 
+            self.radial_depth = float(data["radial_depth"])
+            self.pump_profile = data["pump_profile"] 
             self._logger.info("ready to start job")
             if float(data["e_ratio"]) > 1.0 and not self.rock_main["type"] == "geometric":
                 rad = float(data["e_rad"])
@@ -1248,6 +1282,12 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
                 self.ellipse = {"a" : rad, "ratio" : ratio }
             else:
                 self.ellipse = None
+            if self.pump_profile:
+                if self.pump_profile != "None":
+                    profiles.createsplines(self, self.pump_profile)
+                    self.use_scan = True
+                    self._logger.info(self.spline)
+                    self._logger.info(self.a_spline)
             self._start_job()
             return
 

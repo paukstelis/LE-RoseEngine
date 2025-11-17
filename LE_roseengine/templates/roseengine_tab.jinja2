@@ -74,10 +74,16 @@
                         <input id="pump_invert" type="checkbox" data-bind="checked: pump_invert">
                     </label>
                 </div>
+                <div>
+                    <label>Available X scans:</label>
+                        <select id="scan_pump_select" data-bind="">
+                    </select>
+                </div>
                 <div style="margin-top: auto; display: flex; justify-content: center;">
                     <button id="clear_rock" class="btn" data-bind="click: function() {clear_rosette('pump')}"> Clear</button>
                 </div>
                 <!-- Add more pump-specific controls here if needed -->
+                
             </div>
         </div>
         
@@ -247,7 +253,7 @@
                 </tbody>
             </table>    
             </div>
-            <div id=laser_numbers data-bind="visible: laser_mode">
+            <div id=laser_numbers data-bind="visible: laser_mode()">
                 <label title="The base laser power, 0 to 1000" for="laser_power">Laser Power:</label>
                 <input id="laser_power" type="number" max="1000" value="1" step="1" data-bind="value: laser_base">
 
