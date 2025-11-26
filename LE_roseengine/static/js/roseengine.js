@@ -32,6 +32,7 @@ $(function() {
         self.pump_invert = ko.observable(0);
 
         self.phase_offset = ko.observable(0);
+        self.ecc_offset = ko.observable(0.0);
         self.s_amp = ko.observable(1.0);
         self.peak = ko.observable(1);
         self.pshift = ko.observable(0.0);
@@ -500,7 +501,8 @@ $(function() {
                     max: data.maxrad,
                     min: data.minrad,
                 };
-                this.createPolarPlot(data.type, rosette_info);
+                //this.createPolarPlot(data.type, rosette_info);
+                Plotly.newPlot('rockarea', data.graph.data, data.graph.layout,{displayModeBar: false});
                 if (self.special) {
                     self.special_warning("on","rock");
                 }
@@ -523,7 +525,7 @@ $(function() {
                     max: data.maxrad,
                     min: data.minrad,
                 };
-                this.createPolarPlot(data.type, rosette_info);
+                Plotly.newPlot('pumparea', data.graph.data, data.graph.layout,{displayModeBar: false});
                 if (self.special) {
                     self.special_warning("on","pump");
                 }
@@ -699,7 +701,8 @@ $(function() {
         self.load_rosette = function(filePath, type) {
             var data = {
                 filepath: filePath,
-                type: type
+                type: type,
+                ecc_offset: self.ecc_offset(),
             };
 
             OctoPrint.simpleApiCommand("roseengine", "load_rosette", data)
