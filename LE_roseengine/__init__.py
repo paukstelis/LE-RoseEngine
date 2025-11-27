@@ -248,21 +248,19 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
         return math.hypot(x - cx, y - cy)      
     
     def create_working_path(self, rosette, amp):
-        #self._logger.info(rosette["radii"][0])
-        #Need to update so it returns both radii and angles now
         rl = rosette["radii"]
         an = rosette["angles"]
         radii = np.array(rl)
+        radii = np.append(radii,radii[0])
         angles = np.array(an)
-        #angles = np.deg2rad(angles)
-        #angles = np.unwrap(angles)
-        #angles = np.degrees(angles)
+        angles = np.append(angles, 0.0)
+        angles = np.deg2rad(angles)
+        angles = np.unwrap(angles)
+        angles = np.degrees(angles)
         radii = np.array(radii) * amp
         # Calculate differences
         radius_diffs = np.diff(radii)
         angle_diffs = np.diff(angles)
-        #radius_diffs = np.roll(radii, -1) - radii
-        #angle_diffs = np.roll(angles, -1) - angles
         working = {"radii": radius_diffs, "angles": angle_diffs}
         wl = len(working["radii"])
         al = len(working["angles"])
@@ -304,13 +302,10 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
         max_radius = np.max(radii)
         min_radius = np.min(radii)
         max_idx = np.argmax(radii)
-        #These have been commmented out as it appears this leads to large angular shifts, particular when using phasing
-        #the downside is that some designs may not start at max radius
-        #radii = np.roll(radii, -max_idx)
-        #angles = np.roll(angles, -max_idx)
-        self._logger.debug(radii)
-        self._logger.debug("Rolled angles")
-        self._logger.debug(angles)
+
+        #self._logger.debug(radii)
+        #self._logger.debug("Rolled angles")
+        #self._logger.debug(angles)
             
         rosette = {
             "radii": radii,
@@ -350,6 +345,13 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
                 displacement = 0
             angles.append(deg)
             radii.append(displacement)
+
+        if len(radii) > 0:
+            max_idx = int(np.argmax(radii))
+            radii = np.roll(radii, -max_idx)
+            angles = np.roll(angles, -max_idx)
+            angle_offset = angles[0]
+            angles = (angles - angle_offset) % 360
         
         rosette = {
             "radii": radii,
@@ -1226,9 +1228,10 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
             #do some stuff
             rosette = self._parametric_sine(data)
             r = np.array(rosette["radii"])
+            #just add to this so it looks reasonable when graphed
             r = r+50
             a = (rosette["angles"])
-            #just add to this so it looks reasonable
+            
             self._logger.debug(rosette)
             if rose_type == "rock":
                 self.rock_main = rosette
@@ -1239,6 +1242,7 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
             maxrad=int(amp)+50
             minrad=int(amp)
             r = list(r)
+            a = list(a)
             json_figure = self._plotly_json(r,a,maxrad,minrad,lc=lc)
             returndata = dict(type=rose_type, radii=r, angles=a, special=False, graph=json_figure)
             self._plugin_manager.send_plugin_message('roseengine', returndata)
