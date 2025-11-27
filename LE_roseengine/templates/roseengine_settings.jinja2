@@ -20,16 +20,16 @@
             <i class="icon icon-info-sign" title="" data-toggle="tooltip"></i>
         </label>
         <label>
-            <input type="checkbox" data-bind="checked: settings.plugins.roseengine.auto_reset"> Auto-reset on stop
+            <input type="checkbox" data-bind="checked: settings.plugins.roseengine.auto_reset">  Auto-reset on stop
             <i class="icon icon-info-sign" title="" data-toggle="tooltip"></i>
         </label>
         <label>
-            <input type="checkbox" data-bind="checked: settings.plugins.roseengine.relative_return">Return to relative start position during recording
+            <input type="checkbox" data-bind="checked: settings.plugins.roseengine.relative_return">  Return to relative start position during recording
             <i class="icon icon-info-sign" title="" data-toggle="tooltip"></i>
         </label>
         <h3>Laser options</h3>
         <label>
-            <input type="checkbox" data-bind="checked: settings.plugins.roseengine.power_correct">Perform laser power correction based on calculated linear movements
+            <input type="checkbox" data-bind="checked: settings.plugins.roseengine.power_correct">  Perform laser power correction based on calculated linear movements
             <i class="icon icon-info-sign" title="" data-toggle="tooltip"></i>
         </label>
         <label>
@@ -37,11 +37,11 @@
             <i class="icon icon-info-sign" title="" data-toggle="tooltip"></i>
         </label>
         <label>
-            <input type="checkbox" data-bind="checked: settings.plugins.roseengine.laser_start">Start laser with run
+            <input type="checkbox" data-bind="checked: settings.plugins.roseengine.laser_start">  Start laser with run
             <i class="icon icon-info-sign" title="" data-toggle="tooltip"></i>
         </label>
         <label>
-            <input type="checkbox" data-bind="checked: settings.plugins.roseengine.laser_stop">Stop run after single pass
+            <input type="checkbox" data-bind="checked: settings.plugins.roseengine.laser_stop">  Stop run after single pass
             <i class="icon icon-info-sign" title="" data-toggle="tooltip"></i>
         </label>
         <label>
@@ -70,6 +70,30 @@
         </label>
         <label>
             <input type="number" step="1" min="50" max="20000" class="input-mini" data-bind="numeric, value: settings.plugins.roseengine.geo_interp"> Interpolation resampling points
+            <i class="icon icon-info-sign" title="" data-toggle="tooltip"></i>
+        </label>
+
+
+
+
+        <label>
+            <input type="number" step="1" class="input-mini" data-bind="numeric, value: settings.plugins.roseengine.r_radius"> Random radius max value
+            <i class="icon icon-info-sign" title="" data-toggle="tooltip"></i>
+        </label>
+
+        <label>
+            <input type="number" step="1" class="input-mini" data-bind="numeric, value: settings.plugins.roseengine.r_stage"> Random p/q max value
+            <i class="icon icon-info-sign" title="" data-toggle="tooltip"></i>
+        </label>
+
+
+        <label>
+            <input type="checkbox" data-bind="checked: settings.plugins.roseengine.r_phase">  Randomize phase?
+            <i class="icon icon-info-sign" title="" data-toggle="tooltip"></i>
+        </label>
+
+        <label>
+            <input type="number" step="1" class="input-mini" data-bind="numeric, value: settings.plugins.roseengine.r_phase_v"> Random phase max value
             <i class="icon icon-info-sign" title="" data-toggle="tooltip"></i>
         </label>
     </div>

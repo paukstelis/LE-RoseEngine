@@ -258,6 +258,10 @@ $(function() {
             self.geo_stages = self.settings.geo_stages();
             self.geo_points = self.settings.geo_points();
             self.relative_return = self.settings.relative_return();
+            self.r_radius = self.settings.r_radius();
+            self.r_stage = self.settings.r_stage();
+            self.r_phase = self.settings.r_phase();
+            self.r_phase_v = self.settings.r_phase_v();
             var numStages = parseInt(self.geo_stages, 10);
             var stagesArr = [];
             for (var i = 0; i < numStages; i++) {
@@ -591,11 +595,18 @@ $(function() {
         
         self.create_geo = function(randomize) {
             var stages_data = self.stages().map(function(stage, idx) {
+                var spq = (self.r_stage*2)+1;
                 if (randomize) {
-                    var radius = Math.floor(Math.random() * 50) + 1;
-                    var p = Math.floor(Math.random() * 21) - 10;
-                    var q = Math.floor(Math.random() * 21) - 10;
-                    var phase = 0;
+                    var radius = Math.floor(Math.random() * self.r_radius) + 1;
+                    var p = Math.floor(Math.random() * spq) - self.r_stage;
+                    var q = Math.floor(Math.random() * spq) - self.r_stage;
+
+                    if (self.r_phase) {
+                        var phase = Math.floor(Math.random() * self.r_phase_v) + 1;
+                    }
+                    else {
+                        var phase = 0;
+                    }
 
                     // Update the knockout observables so UI reflects the random values
                     stage.radius(radius);
@@ -620,7 +631,7 @@ $(function() {
                     };
                 }
             });
-            console.log(stages_data);
+            //console.log(stages_data);
             OctoPrint.simpleApiCommand("roseengine", "geometric", { stages: stages_data, samples: self.geo_points })
                 .done(function(response) {
                     console.log("Geometric data sent");

@@ -1,14 +1,6 @@
 # coding=utf-8
 from __future__ import absolute_import
 
-### (Don't forget to remove me)
-# This is a basic skeleton for your plugin's __init__.py. You probably want to adjust the class name of your plugin
-# as well as the plugin mixins it's subclassing from. This is really just a basic skeleton to get you started,
-# defining your plugin as a template plugin, settings and asset plugin. Feel free to add or remove mixins
-# as necessary.
-#
-# Take a look at the documentation on what other plugin mixins are available.
-
 import octoprint.plugin
 import octoprint.filemanager
 import octoprint.filemanager.util
@@ -183,9 +175,11 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
             laser_start=False,
             laser_stop=False,
             max_correct=10,
-            min_correct=0.0001
-
-
+            min_correct=0.0001,
+            r_radius=50,
+            r_stage=10,
+            r_phase=False,
+            r_phase_v=45
             )
     
     def get_template_configs(self):
@@ -199,7 +193,6 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
 
     def get_extension_tree(self, *args, **kwargs):
         return {'model': {'png': ["png", "jpg", "jpeg", "gif", "txt", "stl", "svg", "json", "clr"]}}
-    ##~~ AssetPlugin mixin
 
     def get_assets(self):
         return {
@@ -208,7 +201,6 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
         }
     
     def on_event(self, event, payload):
-        
         if event == "plugin_latheengraver_send_position":
             self.get_position(event, payload)
         if event == "plugin_latheengraver_send_laser":
@@ -753,8 +745,8 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
 
         try:
             bf_target = self.bf_target
+            #TODO: new implementation currently ignores direction!
             dir = "" if self.forward else "-"
-            #this reverses direction, but would also have to reverse list to truly be in reverse
             degrees_sec = (self.rpm * 360) / 60
             degrees_chunk = self.chunk * self.a_inc
             loop_start = None
@@ -952,9 +944,10 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
             for each in angle_diffs:
                 self._logger.debug(each)
 
-        large_jumps = np.where(np.abs(angle_diffs) > 360)[0]
+        #this seems to have been mostly corrected by unwraping, but leaving it in for now
+        large_jumps = np.where(np.abs(angle_diffs) > 180)[0]
         if large_jumps.size > 0:
-            self._logger.info(f"Large angle diff (>178 deg) at indices: {large_jumps}, values: {angle_diffs[large_jumps]}")
+            self._logger.info(f"Large angle diff (>180 deg) at indices: {large_jumps}, values: {angle_diffs[large_jumps]}")
             msg=dict(title="Design Problem",
                       text="This design has a large angular jump. This is a known bug. Recreate your design with a fewer number of sample points.",
                       type="warning")
@@ -1007,6 +1000,7 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
         #additional array, might want to rethink how this works
         modifier = []
         mod_array = np.array(modifier)
+        
         if self.pump_main:
             self.pump_work = self.create_working_path(self.pump_main, self.p_amp)
             #Other modifictions
@@ -1065,9 +1059,11 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
             self.rr = True
         gcode.append(f"G92 A{theA}")
         return_gcode.append(f"G92 A{theA}")
+        
         #TODO: If using B-angle, it is possible that start position X is less than end, need to take into account
         x,z,a = self.start_coords["x"], self.start_coords["z"], self.start_coords["a"]
-
+        
+        #TODO: Need to reassess with change to rock_work/pump_work, also, this is kind of gross
         if (len(self.rock_work) or len(self.geo_radii)) and not len(self.pump_work):
             #assume we are just going to back and then in/out
             if self.b_adjust: #do we need to compensate for the actual B-angle?
@@ -1088,16 +1084,19 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
                 return_gcode.append(f"G94 G90 G0 SC_X")
                 gcode.append(f"G90 G0 Z{z} A{a}")
                 return_gcode.append(f"G90 G0 SC_Z A{a}")
+
         if len(self.pump_work) and not len(self.rock_work):
             gcode.append(f"G94 G90 G0 Z{z}")
             gcode.append(f"G0 X{x} A{a}")
             return_gcode.append(f"G94 G90 G0 SC_Z")
             return_gcode.append(f"G0 SC_X A{a}")
+
         if len(self.pump_work) and len(self.rock_work):
             gcode.append(f"G94 G90 G0 Z{z} X{x}")
             gcode.append(f"G0 A{a}")
             return_gcode.append(f"G94 G90 G0 SC_Z SC_X")
             return_gcode.append(f"G0 A{a}")
+
         gcode.append("STOPCAP")
         gcode.append("M30")
         self.reset_cmds = False
@@ -1116,6 +1115,9 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
             self.reset_cmds = True
 
     def _plotly_json(self,r,a,maxrad,minrad,lc="black"):
+        #Using the plotly Python library instead of JavaScript as it seems to handle
+        #polar coordinates much better
+
         fig = self.go.Figure()
         fig.add_trace(go.Scatterpolar(
             r=r,
@@ -1250,7 +1252,6 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
         
         if command == "geometric":
             #list of stages
-            import plotly.graph_objects as go
             self._logger.debug("Got geometric")
             stage_data = []
             for stage in data.get("stages", []):
@@ -1262,6 +1263,7 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
                     "phase": float(stage.get("phase"))
                 }
                 stage_data.append(stage_dict)
+
             self.geo_points = int(data["samples"])
             self._logger.debug(stage_data)
             self._logger.debug(f"Sample points: {self.geo_points}")
@@ -1273,12 +1275,9 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
             s=True
             maxrad = self.rock_main["max_radius"]
             minrad = self.rock_main["min_radius"]
-            #self._logger.debug(r)
-            #self._logger.debug(a)
+
             json_figure = self._plotly_json(r,a,maxrad,minrad,lc="black")
-
             returndata = dict(type="geo", special=s, graph=json_figure)
-
             self._plugin_manager.send_plugin_message('roseengine', returndata) 
 
         
@@ -1500,9 +1499,6 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
     ##~~ Softwareupdate hook
 
     def get_update_information(self):
-        # Define the configuration for your plugin to use with the Software Update
-        # Plugin here. See https://docs.octoprint.org/en/master/bundledplugins/softwareupdate.html
-        # for details.
         return {
             "roseengine": {
                 "displayName": "Roseengine Plugin",
@@ -1519,16 +1515,7 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
             }
         }
 
-
-# If you want your plugin to be registered within OctoPrint under a different name than what you defined in setup.py
-# ("OctoPrint-PluginSkeleton"), you may define that here. Same goes for the other metadata derived from setup.py that
-# can be overwritten via __plugin_xyz__ control properties. See the documentation for that.
 __plugin_name__ = "Roseengine Plugin"
-
-
-# Set the Python version your plugin is compatible with below. Recommended is Python 3 only for all new plugins.
-# OctoPrint 1.4.0 - 1.7.x run under both Python 3 and the end-of-life Python 2.
-# OctoPrint 1.8.0 onwards only supports Python 3.
 __plugin_pythoncompat__ = ">=3,<4"  # Only Python 3
 
 def __plugin_load__():
