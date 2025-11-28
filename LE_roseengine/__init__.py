@@ -745,8 +745,6 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
 
         try:
             bf_target = self.bf_target
-            #TODO: new implementation currently ignores direction!
-            dir = "" if self.forward else "-"
             degrees_sec = (self.rpm * 360) / 60
             degrees_chunk = self.chunk * self.a_inc
             loop_start = None
@@ -764,7 +762,13 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
             if len(phasecmds):
                 cmdlist.extend(phasecmds)
             track = {"x": self.start_coords["x"], "z": self.start_coords["z"], "a": self.start_coords["a"]}
-            #track_z = self.start_coords["z"]
+            
+            if not self.forward:
+                self.working_angles = self.working_angles*-1
+                #self.working_x = np.flip(self.working_x)
+                #self.working_z = np.flip(self.working_z)
+                #self.working_mod = np.flip(self.working_mod)
+
             while self.running:
                 self.buffer = 0
                 degrees_sec = (self.rpm * 360) / 60
@@ -825,7 +829,6 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
                             #self._logger.info(f"Zdiff is {zdiff} delta_ov is {delta_ov}")
                         if self.laser_mode and self.laser:
                             #calculate the chunk distance
-                            #THIS IS NO LONGER CORRECT!!!
                             arc = track["z"] * math.radians(self.a_inc)
                             chunk_distance = chunk_distance + math.sqrt(arc**2 + x**2 + z**2)
 
