@@ -18,7 +18,7 @@
                     <input id="r_amp" type="number" value="0.5" max="5.0" step="any" data-bind="value: r_amp">            
                 </div>
 
-                <div>
+                <div data-bind="visible: exp">
                     <label title="Radial eccentric offset, in mm" for="r_amp">Eccentric offset:</label>
                     <input id="ecc_offset" type="number" min="0.0" value="0" step="any" data-bind="value: ecc_offset">
                 </div>
@@ -80,7 +80,7 @@
                         <input id="pump_invert" type="checkbox" data-bind="checked: pump_invert">
                     </label>
                 </div>
-                <div>
+                <div data-bind="visible: exp">
                     <label>Available X scans:</label>
                         <select id="scan_pump_select" data-bind="">
                     </select>

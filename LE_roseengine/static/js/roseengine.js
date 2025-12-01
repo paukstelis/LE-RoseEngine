@@ -61,6 +61,9 @@ $(function() {
         self.laser_feed = ko.observable(200);
         self.laser_mode = ko.observable(0);
 
+        //experimental
+        self.exp = ko.observable(false);
+
         tab = document.getElementById("tab_plugin_roseengine_link");
         tab.innerHTML = tab.innerHTML.replaceAll("Roseengine Plugin", "Rose Engine");
 
@@ -262,6 +265,10 @@ $(function() {
             self.r_stage = self.settings.r_stage();
             self.r_phase = self.settings.r_phase();
             self.r_phase_v = self.settings.r_phase_v();
+
+            self.exp = self.settings.exp();
+            //console.log(self.exp_feature)
+
             var numStages = parseInt(self.geo_stages, 10);
             var stagesArr = [];
             for (var i = 0; i < numStages; i++) {
@@ -301,6 +308,10 @@ $(function() {
 
             if(!self.is_printing() || self.running()) {
                 self.available(true);
+            }
+
+            if (self.exp_feature() === "true") {
+                self.exp(true);
             }
 
             //console.log(self.available());

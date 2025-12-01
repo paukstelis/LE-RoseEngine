@@ -1,58 +1,63 @@
 <form class="form-horizontal">
     <div class="control-group">
+        <h3>Experimental/Development</h3>
+        <label>
+            <input type="checkbox" data-bind="checked: settings.plugins.roseengine.exp">  Show any experimental features
+            <i class="icon icon-info-sign" title="Reload page after changing this option" data-toggle="tooltip"></i>
+        </label>
         <h3>Control Options</h3>
         <label>
             <input type="number" step="any" min="0.1" max="60.0" class="input-mini" data-bind="value: settings.plugins.roseengine.a_inc"> Rotation angle increment
-            <i class="icon icon-info-sign" title="" data-toggle="tooltip"></i>
+            <i class="icon icon-info-sign" title="Default angular increments" data-toggle="tooltip"></i>
         </label>
         <br>
         <label>
             <input type="number" step="1" min="1" max="60" class="input-mini" data-bind="value: settings.plugins.roseengine.chunk"> Command chunk size
-            <i class="icon icon-info-sign" title="" data-toggle="tooltip"></i>
+            <i class="icon icon-info-sign" title="Number of commands sent at each time." data-toggle="tooltip"></i>
         </label>
         <br>
         <label>
             <input type="number" step="1" min="0" max="95" class="input-mini" data-bind="value: settings.plugins.roseengine.bf_threshold"> Buffer threshold
-            <i class="icon icon-info-sign" title="" data-toggle="tooltip"></i>
+            <i class="icon icon-info-sign" title="Delay sending commands if buffer threshold is below  this value." data-toggle="tooltip"></i>
         </label>
         <label>
             <input type="number" step="1" min="0" max="200" class="input-mini" data-bind="numeric, value: settings.plugins.roseengine.ms_threshold"> Millisecond threshold
-            <i class="icon icon-info-sign" title="" data-toggle="tooltip"></i>
+            <i class="icon icon-info-sign" title="If buffer is above threshold and if calculated time for next chunk is less than this value, next command chunk is sent." data-toggle="tooltip"></i>
         </label>
         <label>
             <input type="checkbox" data-bind="checked: settings.plugins.roseengine.auto_reset">  Auto-reset on stop
-            <i class="icon icon-info-sign" title="" data-toggle="tooltip"></i>
+            <i class="icon icon-info-sign" title="Return to start position each time a run is stopped." data-toggle="tooltip"></i>
         </label>
         <label>
             <input type="checkbox" data-bind="checked: settings.plugins.roseengine.relative_return">  Return to relative start position during recording
-            <i class="icon icon-info-sign" title="" data-toggle="tooltip"></i>
+            <i class="icon icon-info-sign" title="Uses markers to return to relative (not absolute) position during recording." data-toggle="tooltip"></i>
         </label>
         <h3>Laser options</h3>
         <label>
             <input type="checkbox" data-bind="checked: settings.plugins.roseengine.power_correct">  Perform laser power correction based on calculated linear movements
-            <i class="icon icon-info-sign" title="" data-toggle="tooltip"></i>
+            <i class="icon icon-info-sign" title="Decreases laser power as the radius decreases. This REQUIRES zeroing Z-axis at actual Z=0." data-toggle="tooltip"></i>
         </label>
         <label>
             <input type="checkbox" data-bind="checked: settings.plugins.roseengine.use_m3">Use M3, rather than M4
-            <i class="icon icon-info-sign" title="" data-toggle="tooltip"></i>
+            <i class="icon icon-info-sign" title="M4 automatically adjusts laser power based on acceleration. This can be used instead of power correction." data-toggle="tooltip"></i>
         </label>
         <label>
             <input type="checkbox" data-bind="checked: settings.plugins.roseengine.laser_start">  Start laser with run
-            <i class="icon icon-info-sign" title="" data-toggle="tooltip"></i>
+            <i class="icon icon-info-sign" title="Starts the laser as soon as the run begins" data-toggle="tooltip"></i>
         </label>
         <label>
             <input type="checkbox" data-bind="checked: settings.plugins.roseengine.laser_stop">  Stop run after single pass
-            <i class="icon icon-info-sign" title="" data-toggle="tooltip"></i>
+            <i class="icon icon-info-sign" title="Stops the laser after one complete cycle." data-toggle="tooltip"></i>
         </label>
         <label>
             <input type="number" step="1" min="1" max="10" class="input-mini" data-bind="numeric, value: settings.plugins.roseengine.max_correct">
             Maximum power correction scale factor
-            <i class="icon icon-info-sign" title="" data-toggle="tooltip"></i>
+            <i class="icon icon-info-sign" title="When power scaling is used, this is the maximum scale factor from the set power." data-toggle="tooltip"></i>
         </label>
         <label>
             <input type="number" step="any" class="input-mini" data-bind="numeric, value: settings.plugins.roseengine.min_correct">
             Minimum power correction scale factor
-            <i class="icon icon-info-sign" title="" data-toggle="tooltip"></i>
+            <i class="icon icon-info-sign" title="when power scaling is used, this is the minimum scale factor from the set power." data-toggle="tooltip"></i>
         </label>
         <br>
         <h3>Geometric Chuck options</h3>
@@ -66,11 +71,11 @@
         </label>
         <label>
             <input type="number" step="1" min="10" max="10000" class="input-mini" data-bind="numeric, value: settings.plugins.roseengine.geo_thresh"> Interpolation point threshold
-            <i class="icon icon-info-sign" title="" data-toggle="tooltip"></i>
+            <i class="icon icon-info-sign" title="If the number of sampling points is below this value, the data will be re-interpolated. This allows straight lines." data-toggle="tooltip"></i>
         </label>
         <label>
             <input type="number" step="1" min="50" max="20000" class="input-mini" data-bind="numeric, value: settings.plugins.roseengine.geo_interp"> Interpolation resampling points
-            <i class="icon icon-info-sign" title="" data-toggle="tooltip"></i>
+            <i class="icon icon-info-sign" title="The number of sampling points  during re-interpolation." data-toggle="tooltip"></i>
         </label>
 
 

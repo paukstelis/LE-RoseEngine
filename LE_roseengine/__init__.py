@@ -142,6 +142,7 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
         self.use_m3 = bool(self._settings.get(["use_m3"]))
         self.laser_start = bool(self._settings.get(["laser_start"]))
         self.laser_stop = bool(self._settings.get(["laser_stop"]))
+        self.exp = bool(self._settings.get(["exp"]))
 
         storage = self._file_manager._storage("local")
         
@@ -179,7 +180,8 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
             r_radius=50,
             r_stage=10,
             r_phase=False,
-            r_phase_v=45
+            r_phase_v=45,
+            exp=False
             )
     
     def get_template_configs(self):
@@ -1041,6 +1043,14 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
         self.working_z = working_z
         self.working_angles = working_angles
         self.working_mod = mod_array
+
+        if self.ecc_offset and self.pump_main and self.rock_main:
+            self.working_x = np.zeros_like(working_z)
+            msg = dict(
+                        title="Warning!",
+                        text="Eccentric offset of rocking rosette with a pumping rosette is not compatible. Ignoring pumping.",
+                        type="warning")
+            self.send_le_error(msg)
 
         self.start_coords["x"] = self.current_x
         self.start_coords["z"] = self.current_z
