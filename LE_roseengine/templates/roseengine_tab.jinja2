@@ -17,6 +17,12 @@
                     <label title="Amplitude scale factor for rocking" for="r_amp">Rock amplitude:</label>
                     <input id="r_amp" type="number" value="0.5" max="5.0" step="any" data-bind="value: r_amp">            
                 </div>
+
+                <div data-bind="visible: exp">
+                    <label title="Radial eccentric offset, in mm" for="r_amp">Eccentric offset:</label>
+                    <input id="ecc_offset" type="number" min="0.0" value="0" step="any" data-bind="value: ecc_offset">
+                </div>
+
                 <div class="parametric">
                     <details>
                         <summary>Periodic Wave Functions</summary>
@@ -74,10 +80,16 @@
                         <input id="pump_invert" type="checkbox" data-bind="checked: pump_invert">
                     </label>
                 </div>
+                <div data-bind="visible: exp">
+                    <label>Available X scans:</label>
+                        <select id="scan_pump_select" data-bind="">
+                    </select>
+                </div>
                 <div style="margin-top: auto; display: flex; justify-content: center;">
                     <button id="clear_rock" class="btn" data-bind="click: function() {clear_rosette('pump')}"> Clear</button>
                 </div>
                 <!-- Add more pump-specific controls here if needed -->
+                
             </div>
         </div>
         
@@ -247,7 +259,7 @@
                 </tbody>
             </table>    
             </div>
-            <div id=laser_numbers data-bind="visible: laser_mode">
+            <div id=laser_numbers data-bind="visible: laser_mode()">
                 <label title="The base laser power, 0 to 1000" for="laser_power">Laser Power:</label>
                 <input id="laser_power" type="number" max="1000" value="1" step="1" data-bind="value: laser_base">
 

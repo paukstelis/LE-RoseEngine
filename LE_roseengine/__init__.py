@@ -1,14 +1,6 @@
 # coding=utf-8
 from __future__ import absolute_import
 
-### (Don't forget to remove me)
-# This is a basic skeleton for your plugin's __init__.py. You probably want to adjust the class name of your plugin
-# as well as the plugin mixins it's subclassing from. This is really just a basic skeleton to get you started,
-# defining your plugin as a template plugin, settings and asset plugin. Feel free to add or remove mixins
-# as necessary.
-#
-# Take a look at the documentation on what other plugin mixins are available.
-
 import octoprint.plugin
 import octoprint.filemanager
 import octoprint.filemanager.util
@@ -27,7 +19,9 @@ import shutil
 from svgpathtools import *
 from itertools import zip_longest
 from . import geometric
+from . import profiles
 import json
+import plotly.graph_objects as go
 class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
     octoprint.plugin.AssetPlugin,
     octoprint.plugin.StartupPlugin,
@@ -48,7 +42,10 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
         self.pump_main = {}
         self.rock_work = []
         self.pump_work = []
-        self.working = []
+        self.working_x = []
+        self.working_z = []
+        self.working_angles = []
+        self.working_mod = []
         self.recorded = []
         self.last_position = None
         self.chunk = 10
@@ -87,6 +84,12 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
 
         self.ellipse = None
 
+        self.use_scan = None
+        self.scan_file = None
+        self.spline = None
+        self.a_spline = None
+        self.pump_profile = None
+
         #geometric chuck
         self.geo = geometric.GeometricChuck()
         self.geo_radii = []
@@ -116,6 +119,9 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
         self.current_x = None
         self.current_z = None
 
+        #plotly
+        self.go = go
+
     def initialize(self):
         self.datafolder = self.get_plugin_data_folder()
         self._event_bus.subscribe("LATHEENGRAVER_SEND_POSITION", self.get_position)
@@ -136,6 +142,7 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
         self.use_m3 = bool(self._settings.get(["use_m3"]))
         self.laser_start = bool(self._settings.get(["laser_start"]))
         self.laser_stop = bool(self._settings.get(["laser_stop"]))
+        self.exp = bool(self._settings.get(["exp"]))
 
         storage = self._file_manager._storage("local")
         
@@ -169,9 +176,12 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
             laser_start=False,
             laser_stop=False,
             max_correct=10,
-            min_correct=0.0001
-
-
+            min_correct=0.0001,
+            r_radius=50,
+            r_stage=10,
+            r_phase=False,
+            r_phase_v=45,
+            exp=False
             )
     
     def get_template_configs(self):
@@ -185,7 +195,6 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
 
     def get_extension_tree(self, *args, **kwargs):
         return {'model': {'png': ["png", "jpg", "jpeg", "gif", "txt", "stl", "svg", "json", "clr"]}}
-    ##~~ AssetPlugin mixin
 
     def get_assets(self):
         return {
@@ -194,7 +203,6 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
         }
     
     def on_event(self, event, payload):
-        
         if event == "plugin_latheengraver_send_position":
             self.get_position(event, payload)
         if event == "plugin_latheengraver_send_laser":
@@ -234,19 +242,25 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
         return math.hypot(x - cx, y - cy)      
     
     def create_working_path(self, rosette, amp):
-        #self._logger.info(rosette["radii"][0])
-        #Need to update so it returns both radii and angles now
         rl = rosette["radii"]
         an = rosette["angles"]
         radii = np.array(rl)
+        radii = np.append(radii,radii[0])
         angles = np.array(an)
-
+        angles = np.append(angles, 0.0)
+        angles = np.deg2rad(angles)
+        angles = np.unwrap(angles)
+        angles = np.degrees(angles)
         radii = np.array(radii) * amp
-        #generate differences
-        newradii = np.roll(radii, -1) - radii
-        newangles = np.roll(angles, -1) - angles
-
-        return newradii, newangles
+        # Calculate differences
+        radius_diffs = np.diff(radii)
+        angle_diffs = np.diff(angles)
+        working = {"radii": radius_diffs, "angles": angle_diffs}
+        wl = len(working["radii"])
+        al = len(working["angles"])
+        self._logger.debug(f"Created working set with lengths: r={wl}, a={al}")
+        self._logger.debug(f"Radii sum: {np.sum(radius_diffs)}")
+        return working
     
     def _geometric(self, data):
         radii = []
@@ -276,15 +290,16 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
             return
         angles = np.unwrap(angles)
         angles = np.degrees(angles)
-        
+        self._logger.debug("Unrolled angles:")
+        self._logger.debug(angles)
         #calculate min, max
         max_radius = np.max(radii)
         min_radius = np.min(radii)
         max_idx = np.argmax(radii)
-        radii = np.roll(radii, -max_idx)
-        angles = np.roll(angles, -max_idx)
-        self._logger.debug(radii)
-        self._logger.debug(angles)
+
+        #self._logger.debug(radii)
+        #self._logger.debug("Rolled angles")
+        #self._logger.debug(angles)
             
         rosette = {
             "radii": radii,
@@ -324,6 +339,13 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
                 displacement = 0
             angles.append(deg)
             radii.append(displacement)
+
+        if len(radii) > 0:
+            max_idx = int(np.argmax(radii))
+            radii = np.roll(radii, -max_idx)
+            angles = np.roll(angles, -max_idx)
+            angle_offset = angles[0]
+            angles = (angles - angle_offset) % 360
         
         rosette = {
             "radii": radii,
@@ -370,8 +392,25 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
                 cmd += ' ' + insert_str.strip()
         self._logger.info(f"injected, orig: {orig_cmd}, new: {cmd}")
         return cmd
+    
+    def resample_offset(self, radii, angles, offset=0.0):
 
-    def resample_path_to_polar(self, path, center=None):
+        ang_rad = np.deg2rad(angles)
+        # to Cartesian coordinates
+        x = radii * np.cos(ang_rad)
+        y = radii * np.sin(ang_rad)
+        x2 = x + offset
+        y2 = y 
+
+        # convert back to polar
+        offset_radii  = np.hypot(x2, y2)
+        offset_radians = np.arctan2(y2, x2)
+        offset_radians = np.unwrap(offset_radians)
+        offset_angles = np.rad2deg(offset_radians)
+
+        return offset_radii, offset_angles
+
+    def resample_path_to_polar(self, path, center=None, radial_offset=0.0):
         if not center:
             xmin, xmax, ymin, ymax = path.bbox()
             cx = (xmin + xmax) / 2
@@ -379,6 +418,7 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
         else:
             cx = center[0]
             cy = center[1]
+
         radii = []
         angles = []
         N_STEPS = 10000
@@ -420,7 +460,7 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
                 last_angle = angle
         return angles, radii
 
-    def load_rosette(self, filepath):
+    def load_rosette(self, filepath, type):
         folder = self._settings.getBaseFolder("uploads")
         #filename = f"{folder}/{filepath}"
         filename = os.path.join(folder, filepath)
@@ -497,14 +537,10 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
         ):
             radii = radii[:-1]
             angles = angles[:-1]
-        
-        max_radius = np.max(radii)
-        min_radius = np.min(radii)
-        self._logger.debug(f"First/last radii/angle: {radii[0]} {angles[0]} {radii[-1]} {angles[-1]}")
-        
+         
         expected_points = int(360 / self.a_inc)
         uniform_angles = np.arange(0, 360, self.a_inc)
-
+        
         if len(angles) < expected_points:
             self._logger.debug("Running interpolation...")
             # Interpolate radii to uniform angles
@@ -531,6 +567,13 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
         
         elif len(angles) > expected_points and ext == ".svg":
             special_case = True
+
+        if self.ecc_offset and type == "rock":
+            radii, angles = self.resample_offset(radii, angles, self.ecc_offset)
+
+        max_radius = np.max(radii)
+        min_radius = np.min(radii)
+        self._logger.debug(f"First/last radii/angle: {radii[0]} {angles[0]} {radii[-1]} {angles[-1]}")
 
         rosette = {
             "radii": radii,
@@ -564,7 +607,7 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
             loop_start = None
             loop_end = None
             cmdlist = []
-            cmdlist.append("G92 A0")
+            #cmdlist.append("G92 A0")
             if self.laser_mode and self.laser_start:
                 lc = "M4"
                 if self.use_m3:
@@ -685,6 +728,8 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
         if self.laser: #just a safety, will also send M5
             self._printer.commands(["S0"])
 
+
+#TODO: rework this. Yuck. if using radial offset have to figure out how to handle angles with rock+pump. May need to move to using python plotly for everything
     def _job_thread(self):  
         self._logger.info("Starting job thread")
         #phase offsets applied here to the working array
@@ -697,19 +742,18 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
             zero_pump = self.pump_main["radii"][0]
             pump_rad_start = zero_pump - self.pump_main["radii"][roll]
             self._logger.debug(f"pump phase offset X value: {pump_rad_start}")
-            self.working[:, 1] = np.roll(self.working[:, 1], roll)
+            self.working_x[:, 1] = np.roll(self.working_x[:, 1], roll)
             phasecmds.append(f"G0 G91 X{pump_rad_start:0.3f}")
 
         try:
             bf_target = self.bf_target
-            dir = "" if self.forward else "-"
-            #this reverses direction, but would also have to reverse list to truly be in reverse
             degrees_sec = (self.rpm * 360) / 60
             degrees_chunk = self.chunk * self.a_inc
             loop_start = None
             loop_end = None
             cmdlist = []
-            cmdlist.append("G92 A0")
+            #cmdlist.append("G92 A0")
+            ovality_z = 0 #this is how far we have already moved Z at any point
             if self.laser_mode and self.laser_start:
                 lc = "M4"
                 if self.use_m3:
@@ -719,11 +763,15 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
             #cmdlist.append("M3 S1000")
             if len(phasecmds):
                 cmdlist.extend(phasecmds)
-            track_z = self.start_coords["z"]
+            track = {"x": self.start_coords["x"], "z": self.start_coords["z"], "a": self.start_coords["a"]}
+            
+            if not self.forward:
+                self.working_angles = self.working_angles*-1
+                #self.working_x = np.flip(self.working_x)
+                #self.working_z = np.flip(self.working_z)
+                #self.working_mod = np.flip(self.working_mod)
+
             while self.running:
-                #A-axis reset
-                #cmdlist.append("G92 A0")
-                #self._logger.info(f"x:{self.current_x} z:{self.current_z}")
                 self.buffer = 0
                 degrees_sec = (self.rpm * 360) / 60
                 degrees_chunk = self.chunk * self.a_inc
@@ -731,17 +779,16 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
                 tms = round(time.time() * 1000)
                 if loop_start:
                     self._logger.debug(f"loop time ms: {tms - loop_start}")
+                    self._logger.debug(f"Z-positiong at loop: {track["z"]}")
                 loop_start = tms
                 self.feedcontrol["current"] = tms
                 
                 #first chunk will be full size
-                #next_interval = time_unit*self.chunk
                 next_interval = int(degrees_chunk / degrees_sec * 1000)  # in milliseconds
                 self.feedcontrol["next"] = self.feedcontrol["current"] + next_interval
-                #self._logger.info(f"Next interval at {self.rpm} RPM, {next_interval}, bf_target {bf_target}")
                 current_angle = 0
-                for i in range(0, len(self.working), self.chunk):
-              
+                #right now self.working is just rock, pump, mod 
+                for i in range(0, len(self.working_angles), self.chunk):
                     with self.rpm_lock:
                         if self.updated_rpm > 0:
                             #self._logger.info("Updating RPM")
@@ -749,38 +796,49 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
                             self.updated_rpm = 0.0
                             degrees_sec = (self.rpm * 360) / 60
                             next_interval = int(degrees_chunk / degrees_sec * 1000)  
-
                     feed = (360/self.a_inc) * self.rpm
-                    cmdchunk = self.working[i:i+self.chunk]
+                    zchunk = self.working_z[i:i+self.chunk]
+                    achunk = self.working_angles[i:i+self.chunk]
+                    xchunk = self.working_x[i:i+self.chunk]
+                    modchunk = self.working_mod[i:i+self.chunk]
                     chunk_distance = 0
-                    current_angle = i * self.a_inc
-                    for cmd in cmdchunk:
-                        x = cmd[1]
-                        z = cmd[0]
-                        mod = cmd[2]
-                        #modify z values if we have elliptical chuck setting
-                        if self.ellipse:
-                            z = z + mod
-                        current_angle = current_angle + self.a_inc
+                    #tofix
+                    current_angle = track["a"]
+                    
+                    for c in range(0, len(achunk)):
+                        a = achunk[c]
+                        z = zchunk[c]
+                        x = xchunk[c]
+                        m = modchunk[c]
+                        track["z"] = track["z"] + z
+                        track["x"] = track["x"] + x
+                        track["a"] = track["a"] + a
 
                         if self.b_adjust:
-                            #self._logger.info(f"initial x, z: {x} {z}")
-                            #initial test assume reference frame at -90 
                             bangle = math.radians(self.current_b - self.bref) *-1
                             x = x*math.cos(bangle) + z*math.sin(bangle)
                             z = -z*math.sin(bangle) + z*math.cos(bangle)
-                            #self._logger.info(f"modified x, z: {x} {z}")
-                        track_z = track_z + z
+                        if self.ellipse:
+                            z = z + m
+                        if self.use_scan:
+                            #just assume we are doing pumping
+                            zdiff = profiles.ovality_mod(self,track["x"],track["a"])
+                            tx = track["x"]
+                            ta = track["a"]
+                            delta_ov = zdiff - ovality_z
+                            z = z + delta_ov
+                            ovality_z = zdiff
+                            #self._logger.info(f"Zdiff is {zdiff} delta_ov is {delta_ov}")
                         if self.laser_mode and self.laser:
                             #calculate the chunk distance
-                            arc = track_z * math.radians(self.a_inc)
+                            arc = track["z"] * math.radians(self.a_inc)
                             chunk_distance = chunk_distance + math.sqrt(arc**2 + x**2 + z**2)
 
-                        cmdlist.append(f"G93 G91 G1 A{dir}{self.a_inc} X{x:0.3f} Z{z:0.3f} F{feed:0.1f}")
+                        cmdlist.append(f"G93 G91 G1 X{x:0.3f} A{a:0.3f} Z{z:0.3f} F{feed:0.1f}")
                     
                     if self.laser and chunk_distance and self.power_correct:
                         #figure out scaling of power here
-                        calc_time = len(cmdchunk) / (feed) #time in minutes to complete chunk
+                        calc_time = len(achunk) / (feed) #time in minutes to complete chunk
                         nf = chunk_distance/calc_time #calculated feed
                         sf = nf/self.laser_feed
                         if sf < self.min_correct:
@@ -852,7 +910,7 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
         self._logger.debug("Starting geometric job")
         self.start_coords["x"] = self.current_x
         self.start_coords["z"] = self.current_z
-        self.start_coords["a"] = 0.0
+        self.start_coords["a"] = self.current_a
         self.running = True
 
         radii = np.array(self.rock_main["radii"])
@@ -891,9 +949,10 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
             for each in angle_diffs:
                 self._logger.debug(each)
 
-        large_jumps = np.where(np.abs(angle_diffs) > 90)[0]
+        #this seems to have been mostly corrected by unwraping, but leaving it in for now
+        large_jumps = np.where(np.abs(angle_diffs) > 180)[0]
         if large_jumps.size > 0:
-            self._logger.info(f"Large angle diff (>90 deg) at indices: {large_jumps}, values: {angle_diffs[large_jumps]}")
+            self._logger.info(f"Large angle diff (>180 deg) at indices: {large_jumps}, values: {angle_diffs[large_jumps]}")
             msg=dict(title="Design Problem",
                       text="This design has a large angular jump. This is a known bug. Recreate your design with a fewer number of sample points.",
                       type="warning")
@@ -933,23 +992,39 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
         self.jobThread = threading.Thread(target=self._geometric_thread).start()
 
     def _start_job(self):
-        self.rock_work = []
-        self.pump_work = []
         if self.running:
             return
+        self.rock_work = []
+        self.pump_work = []
+        working_z = []
+        working_x = []
+        working_angles = []
         if self.rock_main and self.rock_main["type"] == "geometric":
             self._start_geo()
             return
         #additional array, might want to rethink how this works
         modifier = []
         mod_array = np.array(modifier)
-        if self.rock_main:
-            self.rock_work, _ = self.create_working_path(self.rock_main, self.r_amp)
+        
         if self.pump_main:
-            self.pump_work, _ = self.create_working_path(self.pump_main, self.p_amp)
+            self.pump_work = self.create_working_path(self.pump_main, self.p_amp)
             #Other modifictions
             if self.pump_invert:
-                self.pump_work = np.array(self.pump_work)*-1
+                self.pump_work = np.array(self.pump_work["radii"])*-1
+            working_x = self.pump_work["radii"]
+            working_angles = self.pump_work["angles"]
+        else:
+            working_x = np.zeros_like(self.rock_main["radii"])
+
+        if self.rock_main:
+            #this is now a dict with radii and angle keys
+            self.rock_work = self.create_working_path(self.rock_main, self.r_amp)
+            working_z = self.rock_work["radii"]
+            #default to rock containing our angle set
+            working_angles = self.rock_work["angles"]
+        else:
+            working_z = np.zeros_like(self.pump_main["radii"])
+
         if self.ellipse:
             e_vals = []
             for deg in np.arange(0, 360, self.a_inc):
@@ -958,17 +1033,36 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
             #difference values
             e_a = np.array(e_vals)
             mod_array = np.roll(e_a, -1) - e_a
-    
-        self.working = list(zip_longest(self.rock_work, self.pump_work, mod_array, fillvalue=0))
-        self.working = np.array(self.working)
+        else:
+            mod_array = np.zeros_like(working_z)
+        
+        #self.working = list(zip_longest(self.rock_work, self.pump_work, mod_array, fillvalue=0))
+        #self.working = np.array(self.working)
+        #to get rock+pump working correctly, need to check if rock and pump angle sets are the same, if not resample pump
+        self.working_x = working_x
+        self.working_z = working_z
+        self.working_angles = working_angles
+        self.working_mod = mod_array
+
+        if self.ecc_offset and self.pump_main and self.rock_main:
+            self.working_x = np.zeros_like(working_z)
+            msg = dict(
+                        title="Warning!",
+                        text="Eccentric offset of rocking rosette with a pumping rosette is not compatible. Ignoring pumping.",
+                        type="warning")
+            self.send_le_error(msg)
+
         self.start_coords["x"] = self.current_x
         self.start_coords["z"] = self.current_z
-        self.start_coords["a"] = 0.0
+        self.start_coords["a"] = self.current_a
         self.running = True
-        self._logger.debug(self.working)
+        self._logger.debug(working_z)
+        self._logger.debug(working_angles)
+        self._logger.debug(working_x)
         self.jobThread = threading.Thread(target=self._job_thread).start()
 
     def _reset_gcode(self):
+        self.pump_profile = None
         gcode = []
         return_gcode = []
         #reset A modulo
@@ -978,9 +1072,11 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
             self.rr = True
         gcode.append(f"G92 A{theA}")
         return_gcode.append(f"G92 A{theA}")
+        
         #TODO: If using B-angle, it is possible that start position X is less than end, need to take into account
         x,z,a = self.start_coords["x"], self.start_coords["z"], self.start_coords["a"]
-
+        
+        #TODO: Need to reassess with change to rock_work/pump_work, also, this is kind of gross
         if (len(self.rock_work) or len(self.geo_radii)) and not len(self.pump_work):
             #assume we are just going to back and then in/out
             if self.b_adjust: #do we need to compensate for the actual B-angle?
@@ -988,29 +1084,32 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
                     self._logger.debug("current_x > than x")
                     gcode.append(f"G94 G91 G1 X5 F1000")
                     gcode.append(f"G90 G0 Z{z} A{a}")
-                    return_gcode.append(f"G90 G0 SC_Z A0")
+                    return_gcode.append(f"G90 G0 SC_Z A{a}")
                     gcode.append(f"G90 G0 X{x}")
                     return_gcode.append(f"G90 G0 SC_X")
                 else:
                     gcode.append(f"G94 G90 G0 Z{z} X{x}")
                     return_gcode.append(f"G94 G90 G0 SC_Z SC_X")
-                    gcode.append(f"G0 A0")
-                    return_gcode.append("G0 A0")
+                    gcode.append(f"G0 A{a}")
+                    return_gcode.append("G0 A{a}")
             else:
                 gcode.append(f"G94 G90 G0 X{x}")
                 return_gcode.append(f"G94 G90 G0 SC_X")
                 gcode.append(f"G90 G0 Z{z} A{a}")
-                return_gcode.append(f"G90 G0 SC_Z A0")
+                return_gcode.append(f"G90 G0 SC_Z A{a}")
+
         if len(self.pump_work) and not len(self.rock_work):
             gcode.append(f"G94 G90 G0 Z{z}")
             gcode.append(f"G0 X{x} A{a}")
             return_gcode.append(f"G94 G90 G0 SC_Z")
-            return_gcode.append(f"G0 SC_X A0")
+            return_gcode.append(f"G0 SC_X A{a}")
+
         if len(self.pump_work) and len(self.rock_work):
             gcode.append(f"G94 G90 G0 Z{z} X{x}")
-            gcode.append(f"G0 A0")
+            gcode.append(f"G0 A{a}")
             return_gcode.append(f"G94 G90 G0 SC_Z SC_X")
-            return_gcode.append(f"G0 A0")
+            return_gcode.append(f"G0 A{a}")
+
         gcode.append("STOPCAP")
         gcode.append("M30")
         self.reset_cmds = False
@@ -1027,6 +1126,43 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
 
         if self.auto_reset:
             self.reset_cmds = True
+
+    def _plotly_json(self,r,a,maxrad,minrad,lc="black"):
+        #Using the plotly Python library instead of JavaScript as it seems to handle
+        #polar coordinates much better
+
+        fig = self.go.Figure()
+        fig.add_trace(go.Scatterpolar(
+            r=r,
+            theta=a,  # plotly expects degrees
+            mode='lines',
+            line_color=lc,   
+        ))
+
+        fig.update_layout(
+            margin = dict(
+            l=30,
+            r=30,
+            b=10,
+            t=40,
+            pad=4
+            ),
+            polar=dict(
+                radialaxis=dict(visible=False,showline=False,autorange=False,range=(0,maxrad*1.1)),
+                angularaxis=dict(rotation=180, direction="clockwise",showline=False)
+            ),
+            showlegend=False,
+            title=dict(
+                text=f"r max={maxrad:0.1f}<br>r min={minrad:0.1f}",
+                font=dict(size=12),
+                xanchor='center',
+                yanchor='top',
+                x=0.5,
+            )
+            
+        )
+
+        return fig.to_plotly_json()
             
     def write_gcode(self):
         filename = time.strftime("%Y%m%d-%H%M") + "roseengine.gcode"
@@ -1067,19 +1203,24 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
         if command == "load_rosette":
             filePath = data["filepath"]
             type = data["type"]
-            rosette = self.load_rosette(filePath)
+            self.ecc_offset = float(data["ecc_offset"])
+            rosette = self.load_rosette(filePath,type)
             s = rosette["special"]
             if type == "rock":
                 self.rock_main = rosette
                 r = list(self.rock_main["radii"])
                 a = list(self.rock_main["angles"])
-                data = dict(type="rock", special=s, radii=r, angles=a, maxrad=self.rock_main["max_radius"], minrad=self.rock_main["min_radius"])
+                json_figure = self._plotly_json(r,a,self.rock_main["max_radius"],minrad=self.rock_main["min_radius"],lc="blue")
+                #data = dict(type="rock", special=s, radii=r, angles=a, maxrad=self.rock_main["max_radius"], minrad=self.rock_main["min_radius"])
+                data = dict(type="rock", special=s, graph=json_figure)
                 
             elif type == "pump":
                 self.pump_main = rosette
                 r = list(self.pump_main["radii"])
                 a = list(self.pump_main["angles"])
-                data = dict(type="pump", special=s, radii=r, angles=a, maxrad=self.pump_main["max_radius"], minrad=self.pump_main["min_radius"])
+                json_figure = self._plotly_json(r,a,self.pump_main["max_radius"],minrad=self.pump_main["min_radius"],lc="green")
+                data = dict(type="pump", special=s, graph=json_figure)
+                #data = dict(type="pump", special=s, radii=r, angles=a, maxrad=self.pump_main["max_radius"], minrad=self.pump_main["min_radius"])
                 #self._logger.info(f"Loaded pump rosette: {self.pump_main}")
             
             self._logger.debug(data)
@@ -1095,23 +1236,35 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
         if command == "parametric":
             rose_type = data["type"]
             wave_type = data["wave_type"]
-            amp = data["amp"]
+            amp = float(data["amp"])
             peak = data["peak"]
             phase = data["phase"]
-            returndata = dict(type=rose_type, radii=None, angles=None, special=False, maxrad=f"{wave_type}", minrad=f"Amp:{amp}, Periods:{peak}")
+            lc = "black"
             #do some stuff
             rosette = self._parametric_sine(data)
+            r = np.array(rosette["radii"])
+            #just add to this so it looks reasonable when graphed
+            r = r+50
+            a = (rosette["angles"])
+            
             self._logger.debug(rosette)
             if rose_type == "rock":
                 self.rock_main = rosette
+                lc = "blue"
             else:
                 self.pump_main = rosette
+                lc = "green"
+            maxrad=int(amp)+50
+            minrad=int(amp)
+            r = list(r)
+            a = list(a)
+            json_figure = self._plotly_json(r,a,maxrad,minrad,lc=lc)
+            returndata = dict(type=rose_type, radii=r, angles=a, special=False, graph=json_figure)
             self._plugin_manager.send_plugin_message('roseengine', returndata)
             return
         
         if command == "geometric":
             #list of stages
-            import plotly.graph_objects as go
             self._logger.debug("Got geometric")
             stage_data = []
             for stage in data.get("stages", []):
@@ -1123,6 +1276,7 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
                     "phase": float(stage.get("phase"))
                 }
                 stage_data.append(stage_dict)
+
             self.geo_points = int(data["samples"])
             self._logger.debug(stage_data)
             self._logger.debug(f"Sample points: {self.geo_points}")
@@ -1134,45 +1288,9 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
             s=True
             maxrad = self.rock_main["max_radius"]
             minrad = self.rock_main["min_radius"]
-            #self._logger.debug(r)
-            #self._logger.debug(a)
-            title=""
 
-            fig = go.Figure()
-            fig.add_trace(go.Scatterpolar(
-                r=r,
-                theta=a,  # plotly expects degrees
-                mode='lines',
-                
-            ))
-
-            fig.update_layout(
-                margin = dict(
-                l=30,
-                r=30,
-                b=10,
-                t=40,
-                pad=4
-                ),
-                polar=dict(
-                    radialaxis=dict(visible=False,showline=False,autorange=True),
-                    angularaxis=dict(rotation=180, direction="clockwise",showline=False)
-                ),
-                showlegend=False,
-                title=dict(
-                    text=f"r max={maxrad:0.1f}<br>r min={minrad:0.1f}",
-                    font=dict(size=12),
-                    xanchor='center',
-                    yanchor='top',
-                    x=0.5,
-                )
-               
-            )
-
-            json_figure = fig.to_plotly_json()
-
+            json_figure = self._plotly_json(r,a,maxrad,minrad,lc="black")
             returndata = dict(type="geo", special=s, graph=json_figure)
-
             self._plugin_manager.send_plugin_message('roseengine', returndata) 
 
         
@@ -1240,7 +1358,8 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
             self.bref = float(data["bref"])
             self.laser_base = int(data["laser_base"]) #should these be dynamic?
             self.laser_feed = int(data["laser_feed"])
-            self.radial_depth = float(data["radial_depth"]) 
+            self.radial_depth = float(data["radial_depth"])
+            self.pump_profile = data["pump_profile"] 
             self._logger.info("ready to start job")
             if float(data["e_ratio"]) > 1.0 and not self.rock_main["type"] == "geometric":
                 rad = float(data["e_rad"])
@@ -1248,6 +1367,12 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
                 self.ellipse = {"a" : rad, "ratio" : ratio }
             else:
                 self.ellipse = None
+            if self.pump_profile:
+                if self.pump_profile != "None":
+                    profiles.createsplines(self, self.pump_profile)
+                    self.use_scan = True
+                    self._logger.info(self.spline)
+                    self._logger.info(self.a_spline)
             self._start_job()
             return
 
@@ -1387,9 +1512,6 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
     ##~~ Softwareupdate hook
 
     def get_update_information(self):
-        # Define the configuration for your plugin to use with the Software Update
-        # Plugin here. See https://docs.octoprint.org/en/master/bundledplugins/softwareupdate.html
-        # for details.
         return {
             "roseengine": {
                 "displayName": "Roseengine Plugin",
@@ -1406,16 +1528,7 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
             }
         }
 
-
-# If you want your plugin to be registered within OctoPrint under a different name than what you defined in setup.py
-# ("OctoPrint-PluginSkeleton"), you may define that here. Same goes for the other metadata derived from setup.py that
-# can be overwritten via __plugin_xyz__ control properties. See the documentation for that.
 __plugin_name__ = "Roseengine Plugin"
-
-
-# Set the Python version your plugin is compatible with below. Recommended is Python 3 only for all new plugins.
-# OctoPrint 1.4.0 - 1.7.x run under both Python 3 and the end-of-life Python 2.
-# OctoPrint 1.8.0 onwards only supports Python 3.
 __plugin_pythoncompat__ = ">=3,<4"  # Only Python 3
 
 def __plugin_load__():
