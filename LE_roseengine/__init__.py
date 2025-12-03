@@ -83,6 +83,7 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
         self.pump_para = False
 
         self.ellipse = None
+        self.ecc_offset = 0.0
 
         self.use_scan = None
         self.scan_file = None

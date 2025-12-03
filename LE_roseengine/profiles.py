@@ -79,9 +79,9 @@ def createsplines(_plugin, filepath):
     _plugin._logger.info(ind_vals)
     _plugin._logger.info(dep_grid)
     A_radians = np.deg2rad(np.mod(A_vals, 360.0))
-    if A_radians[0] == 0 and A_vals[-1] == 360:
+    if A_vals[-1] != 360:
         A_radians = np.append(A_radians, 2 * np.pi)
-        Z_grid = np.vstack([Z_grid, Z_grid[0]])
+        dep_grid = np.vstack([dep_grid, dep_grid[0]])
     _plugin.a_spline = RectBivariateSpline(A_radians, ind_vals, dep_grid, kx=3, ky=3, s=0)
 
 def ovality_mod(_plugin, x, a_deg):
@@ -89,7 +89,7 @@ def ovality_mod(_plugin, x, a_deg):
     zdiff = _plugin.spline(x)
     a_wrapped = np.deg2rad(np.mod(a_deg, 360.0))
     adiff = _plugin.a_spline.ev(a_wrapped, x)
-    #_plugin._logger.info(f"Z diff from X: {zdiff} Z diff from rot {adiff}")
+    _plugin._logger.debug(f"Z diff from X: {zdiff} Z diff from rot {adiff} at {a_deg}")
     #does it make sense to have both of these or can I just use adiff?
     #after contemplation, this won't be useful with recorded gcode, so it makes sense to just use adiffink
     return adiff
