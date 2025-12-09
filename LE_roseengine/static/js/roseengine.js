@@ -63,6 +63,7 @@ $(function() {
 
         //experimental
         self.exp = ko.observable(false);
+        self.gcode_geo = ko.observable(false);
 
         tab = document.getElementById("tab_plugin_roseengine_link");
         tab.innerHTML = tab.innerHTML.replaceAll("Roseengine Plugin", "Rose Engine");
@@ -310,10 +311,6 @@ $(function() {
                 self.available(true);
             }
 
-            if (self.exp_feature() === "true") {
-                self.exp(true);
-            }
-
             //console.log(self.available());
         };
 
@@ -521,15 +518,13 @@ $(function() {
                 if (self.special) {
                     self.special_warning("on","rock");
                 }
-                else { self.special_warning("off","rock"); }
-                
+                else { self.special_warning("off","rock"); }  
             }
 
             if (plugin == 'roseengine' && data.type == 'geo') {
                 console.log(data.graph);
                 var json_data = JSON.stringify(data.graph);
-                Plotly.newPlot('rockarea', data.graph.data, data.graph.layout,{displayModeBar: false});
-                
+                Plotly.newPlot('rockarea', data.graph.data, data.graph.layout,{displayModeBar: false});   
             }
 
             if (plugin == 'roseengine' && data.type == 'pump') {
@@ -550,11 +545,12 @@ $(function() {
             if (plugin == 'roseengine' && data.func == 'refresh') {
                 self.fetchProfileFiles();
                 self.fetchRosetteFiles();
+                //console.log("got files");
             }
 
-            if (plugin == 'roseengine' && data.laser_mode === 0 || data.laser_mode === 1 ) {
-                console.log(data);
-                self.laser_mode(data.laser_mode);
+            if (plugin == 'roseengine' && data.laser === false || data.laser === true ) {
+                //console.log(data);
+                self.laser_mode(data.laser);
                 //console.log("Laser mode set");
             }
         };
@@ -758,6 +754,14 @@ $(function() {
 
         };
 
+        self.geo_gcode = function() {
+
+            self.gcode_geo(true);
+            self.startjob();
+
+        }
+
+
         self.startjob = function() {
 
             var data = {
@@ -775,6 +779,7 @@ $(function() {
                 laser_feed: self.laser_feed(),
                 radial_depth: self.radial_depth(),
                 pump_profile: self.pump_profile,
+                gcode_geo: self.gcode_geo(),
                
 
             };
@@ -787,6 +792,8 @@ $(function() {
                 .fail(function() {
                     console.error("Start failed");
                 });
+            
+            self.gcode_geo(false);
 
         };
 

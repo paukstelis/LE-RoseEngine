@@ -171,6 +171,9 @@
                             <select id="saved_geo_select" data-bind="">
                         </select>
                     </div>
+                    <div data-bind="visible: exp">
+                        <button title="Convert current geometric design to XYZ gcode, saved to the templates folder" id="gcode_geo" class="btn" data-bind="click: function() {geo_gcode()}"> To Gcode</button>
+                    </div>
                 </details>
             </div>
 

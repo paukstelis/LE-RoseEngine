@@ -100,6 +100,11 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
         self.geo_thresh = 500
         self.geo_interp = 6000
         self.radial_depth = 0
+        self.gcode_geo = False
+        self.geo_cutdepth = 0.0
+        self.geo_stepdown = 0.0
+        self.geo_feedrate = 0.0
+        self.geo_plunge = 0.0
 
         #laser
         self.laser_mode = False
@@ -144,6 +149,10 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
         self.laser_start = bool(self._settings.get(["laser_start"]))
         self.laser_stop = bool(self._settings.get(["laser_stop"]))
         self.exp = bool(self._settings.get(["exp"]))
+        self.geo_cutdepth = float(self._settings.get(["geo_cutdepth"]))
+        self.geo_stepdown = float(self._settings.get(["geo_stepdown"]))
+        self.geo_feedrate = float(self._settings.get(["geo_feedrate"]))
+        self.geo_plunge = float(self._settings.get(["geo_plunge"]))
 
         storage = self._file_manager._storage("local")
         
@@ -182,7 +191,11 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
             r_stage=10,
             r_phase=False,
             r_phase_v=45,
-            exp=False
+            exp=False,
+            geo_cutdepth=1.0,
+            geo_stepdown=1.0,
+            geo_feedrate=800,
+            geo_plunge=200
             )
     
     def get_template_configs(self):
@@ -206,10 +219,7 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
     def on_event(self, event, payload):
         if event == "plugin_latheengraver_send_position":
             self.get_position(event, payload)
-        if event == "plugin_latheengraver_send_laser":
-            self._logger.info(payload)
-            self.laser_mode = payload["laser_mode"]
-            self._plugin_manager.send_plugin_message("roseengine", payload)
+
         if event == "UpdateFiles":
             #get all file lists
             data = dict(
@@ -225,6 +235,12 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
         self.current_b = payload["b"]
         self.buffer = payload["bf"]
         self.state = payload["state"]
+        laser_mode = bool(payload["laser"])
+        if laser_mode != self.laser_mode:
+            self._logger.info(f"laser_mode is {laser_mode} and self.laser_mode is {self.laser_mode}")
+            self._logger.info("Laser mode changed")
+            self._plugin_manager.send_plugin_message("roseengine", dict(laser=laser_mode))
+            self.laser_mode = laser_mode
         #self._logger.info(payload["state"])
         self.buffer_received = True
         
@@ -940,6 +956,12 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
             new_radii = radii
             new_angles = angles
 
+        if self.gcode_geo:
+            #back to cartesian!
+            self.geo_gcode(new_radii, new_angles)
+            self.running = False
+            return
+
         #remove last value here
         new_radii = new_radii[:-1]
         new_angles = new_angles[:-1]
@@ -970,6 +992,8 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
         self.geo_radii = radius_diffs
         self.geo_angles = angle_diffs
         self.geo_depth = np.zeros_like(self.geo_radii)
+
+        
         
         if self.radial_depth:
             max_r = np.max(new_radii)
@@ -1164,6 +1188,61 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
         )
 
         return fig.to_plotly_json()
+    
+    def geo_gcode(self, radii, angles):
+        self.geo_gcode = False
+        gcode = []
+        #to cartesian
+        x = radii * np.cos(np.radians(angles))
+        y = radii * np.sin(np.radians(angles))
+
+        diam = 2 * np.max(radii)
+        #step-down and depth-of-cut, feedrate
+        sd = self.geo_stepdown
+        cd = self.geo_cutdepth
+        fr = self.geo_feedrate
+        pr = self.geo_plunge
+
+        # Calculate depth passes
+        pass_info = divmod(cd, sd)
+        passes = pass_info[0]
+        last_pass_depth = pass_info[1]
+        self._logger.debug(f"Last pass depth: {last_pass_depth}")
+        if last_pass_depth:
+            total_passes = int(passes + 1)
+        else:
+            total_passes = int(passes)
+
+        #comments
+        gcode.append("(Geometric chuck pattern written by LE-RoseEngine plugin)")
+        gcode.append(f"(Design width/diameter: {diam})")
+        gcode.append(f"(Cut depth: {cd}, Max step down: {sd}, Feedrate: {fr})")
+        gcode.extend(["G21","G90","M3 S1000","G4 P1","G0 X0.0 Y0.0"])
+        gcode.append(f"G0 Z5.0")
+        #move to first position
+        for depth in range(1,total_passes+1):
+            tocut = depth*sd
+            self._logger.debug(f"depth to cut: {tocut}")
+            if tocut > cd and last_pass_depth != 0.0:
+                tocut = tocut - sd + last_pass_depth
+                self._logger.debug(f"modified depth to cut: {tocut}")
+            gcode.append(f"(Starting cut at depth: -{tocut})")
+            gcode.append(f"G0 X{float(x[0]):.3f} Y{float(y[0]):.3f}")
+            gcode.append(f"G1 Z-{tocut:.3f} F{pr}")
+            for i in range(1, len(x)):
+                gcode.append(f"G1 X{float(x[i]):.3f} Y{float(y[i]):.3f} F{fr}")
+            gcode.append(f"G0 Z5")
+            gcode.append(f"G0 X0 Y0")
+        
+        
+        gcode.append("M30")
+        filename = time.strftime("%Y%m%d-%H%M") + "_geometric.gcode"
+        path_on_disk = "{}/templates/{}".format(self._settings.getBaseFolder("uploads"), filename)
+        with open(path_on_disk,"w") as newfile:
+            #write in comment stuff here
+            for line in gcode:
+                newfile.write(f"\n{line}")
+
             
     def write_gcode(self):
         filename = time.strftime("%Y%m%d-%H%M") + "roseengine.gcode"
@@ -1360,7 +1439,8 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
             self.laser_base = int(data["laser_base"]) #should these be dynamic?
             self.laser_feed = int(data["laser_feed"])
             self.radial_depth = float(data["radial_depth"])
-            self.pump_profile = data["pump_profile"] 
+            self.pump_profile = data["pump_profile"]
+            self.gcode_geo = bool(data["gcode_geo"]) 
             self._logger.info("ready to start job")
             if float(data["e_ratio"]) > 1.0 and not self.rock_main["type"] == "geometric":
                 rad = float(data["e_rad"])
