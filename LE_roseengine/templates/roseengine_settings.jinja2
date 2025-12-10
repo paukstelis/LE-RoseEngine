@@ -77,10 +77,6 @@
             <input type="number" step="1" min="50" max="20000" class="input-mini" data-bind="numeric, value: settings.plugins.roseengine.geo_interp"> Interpolation resampling points
             <i class="icon icon-info-sign" title="The number of sampling points  during re-interpolation." data-toggle="tooltip"></i>
         </label>
-
-
-
-
         <label>
             <input type="number" step="1" class="input-mini" data-bind="numeric, value: settings.plugins.roseengine.r_radius"> Random radius max value
             <i class="icon icon-info-sign" title="" data-toggle="tooltip"></i>
@@ -101,5 +97,24 @@
             <input type="number" step="1" class="input-mini" data-bind="numeric, value: settings.plugins.roseengine.r_phase_v"> Random phase max value
             <i class="icon icon-info-sign" title="" data-toggle="tooltip"></i>
         </label>
+        <div class="dev">
+        <h4>Geometric Chuck Gcode</h4>
+        <label>
+            <input type="number" step="any" min="0" max="20" class="input-mini" data-bind="numeric, value: settings.plugins.roseengine.geo_cutdepth"> Cut depth.
+            <i class="icon icon-info-sign" title="Total depth of cut" data-toggle="tooltip"></i>
+        </label>
+        <label>
+            <input type="number" step="any" min="0" max="20" class="input-mini" data-bind="numeric, value: settings.plugins.roseengine.geo_stepdown"> Cut step down
+            <i class="icon icon-info-sign" title="Maximum depth of any cut." data-toggle="tooltip"></i>
+        </label>
+        <label>
+            <input type="number" step="any" min="1" max="2000" class="input-mini" data-bind="numeric, value: settings.plugins.roseengine.geo_feedrate"> Feed rate(mm/min)
+            <i class="icon icon-info-sign" title="Cut feed rate" data-toggle="tooltip"></i>
+        </label>
+        <label>
+            <input type="number" step="any" min="1" max="2000" class="input-mini" data-bind="numeric, value: settings.plugins.roseengine.geo_plunge"> Plunge Feed rate(mm/min)
+            <i class="icon icon-info-sign" title="Cut feed rate" data-toggle="tooltip"></i>
+        </label>
+        </div>
     </div>
 </form>
