@@ -32,6 +32,15 @@
             <input type="checkbox" data-bind="checked: settings.plugins.roseengine.relative_return">  Return to relative start position during recording
             <i class="icon icon-info-sign" title="Uses markers to return to relative (not absolute) position during recording." data-toggle="tooltip"></i>
         </label>
+
+        <label title="When rocking and pumping are used simulatenously, the axis associated with this function is reset first">Reset Priority:
+                            <select id="reset_prior" data-bind="value: settings.plugins.roseengine.reset_priority">
+                                <option value="none">None</option>
+                                <option value="rock">Rock</option>
+                                <option value="pump">Pump</option>
+                            </select>
+        </label>
+
         <h3>Laser options</h3>
         <label>
             <input type="checkbox" data-bind="checked: settings.plugins.roseengine.power_correct">  Perform laser power correction based on calculated linear movements
