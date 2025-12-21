@@ -93,8 +93,8 @@ def ovality_mod(_plugin, x, a_deg):
     #does it make sense to have both of these or can I just use adiff?
     #after contemplation, this won't be useful with recorded gcode, so it makes sense to just use adiffink
     #need to have zdiff as well if we want to start at zero and just traverse, but make it some setting
-    #if _plugin.use_zdiff:
-    #    return zdiff+adiff
-    #else:
-    return zdiff+adiff
+    if _plugin.use_zdiff:
+        return zdiff+adiff
+    else:
+        return adiff
 

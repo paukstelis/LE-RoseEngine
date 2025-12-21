@@ -154,6 +154,7 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
         self.geo_feedrate = float(self._settings.get(["geo_feedrate"]))
         self.geo_plunge = float(self._settings.get(["geo_plunge"]))
         self.reset_priority = self._settings.get(["reset_priority"])
+        self.use_zdiff = bool(self._settings.get(["use_zdiff"]))
 
         storage = self._file_manager._storage("local")
         
@@ -197,7 +198,8 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
             geo_stepdown=1.0,
             geo_feedrate=800,
             geo_plunge=200,
-            reset_priority="none"
+            reset_priority="none",
+            use_zdiff = False
             )
     
     def get_template_configs(self):

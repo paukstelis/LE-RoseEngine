@@ -41,6 +41,10 @@
                             </select>
         </label>
 
+        <label title="When using an X-scan with pumping, this option will use both the difference distance and the rotational difference when performing Z compensation">
+        <input type="checkbox" data-bind="checked: settings.plugins.roseengine.use_zdiff">   Use positional Z-difference with X-scans
+        </label>
+
         <h3>Laser options</h3>
         <label>
             <input type="checkbox" data-bind="checked: settings.plugins.roseengine.power_correct">  Perform laser power correction based on calculated linear movements
