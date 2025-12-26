@@ -47,6 +47,7 @@ $(function() {
         self.geo_points = ko.observable(6000);
         self.saved_geos = ko.observableArray([]);
         self.radial_depth = ko.observable(0.0);
+        self.target_radius = ko.observable(0.0);
 
         //Profiles
         //self.pump_profile = ko.observable()
@@ -601,6 +602,7 @@ $(function() {
         };
         
         self.create_geo = function(randomize) {
+            var total_radius = 0;
             var stages_data = self.stages().map(function(stage, idx) {
                 var spq = (self.r_stage*2)+1;
                 if (randomize) {
@@ -620,7 +622,7 @@ $(function() {
                     stage.p(p);
                     stage.q(q);
                     stage.phase(phase);
-
+                    total_radius += radius;
                     return {
                         id: stage.id,
                         radius: radius,
@@ -629,6 +631,8 @@ $(function() {
                         phase: phase
                     };
                 } else {
+                    var r = ko.unwrap(stage.radius);
+                    total_radius += (typeof r === "number" ? r : parseFloat(r) || 0);
                     return {
                         id: stage.id,
                         radius: ko.unwrap(stage.radius),
@@ -637,6 +641,18 @@ $(function() {
                         phase: ko.unwrap(stage.phase)
                     };
                 }
+            });
+
+            var scale = (total_radius !== 0 && self.target_radius() > 0) ? (self.target_radius() / total_radius) : 1.0;
+            stages_data = stages_data.map(function(st, i) {
+                var scaled = Object.assign({}, st);
+                scaled.radius = parseFloat(st.radius) * scale;
+                // reflect scaled value in UI observables
+                var stageObs = self.stages()[i];
+                if (stageObs && ko.isObservable(stageObs.radius)) {
+                    stageObs.radius(scaled.radius);
+                }
+                return scaled;
             });
             //console.log(stages_data);
             OctoPrint.simpleApiCommand("roseengine", "geometric", { stages: stages_data, samples: self.geo_points })

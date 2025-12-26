@@ -155,7 +155,11 @@
                     <!-- /ko -->
                     <div>
                         <label for="geo_points" title="Number of sampling points" >Sample points:</label>
-                        <input class="span4" id="geo_points" type="number" min="50" step="any" data-bind="value: geo_points">
+                        <input class="span3" id="geo_points" type="number" min="50" step="any" data-bind="value: geo_points">
+                        <label for="target_radius" title="Scale to fit this radius" >Target radius:</label>
+                        <input class="span3" id="target_radius" type="number" step="any" data-bind="value: target_radius">
+                    </div>
+                    <div>
                     </div>
                     <div>
                         <button id="create_geo" class="btn" data-bind="click: function() {create_geo(false)}"> Create</button>

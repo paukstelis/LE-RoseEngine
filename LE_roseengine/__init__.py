@@ -153,6 +153,8 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
         self.geo_stepdown = float(self._settings.get(["geo_stepdown"]))
         self.geo_feedrate = float(self._settings.get(["geo_feedrate"]))
         self.geo_plunge = float(self._settings.get(["geo_plunge"]))
+        self.reset_priority = self._settings.get(["reset_priority"])
+        self.use_zdiff = bool(self._settings.get(["use_zdiff"]))
 
         storage = self._file_manager._storage("local")
         
@@ -195,7 +197,9 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
             geo_cutdepth=1.0,
             geo_stepdown=1.0,
             geo_feedrate=800,
-            geo_plunge=200
+            geo_plunge=200,
+            reset_priority="none",
+            use_zdiff = False
             )
     
     def get_template_configs(self):
@@ -796,7 +800,7 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
                 tms = round(time.time() * 1000)
                 if loop_start:
                     self._logger.debug(f"loop time ms: {tms - loop_start}")
-                    self._logger.debug(f"Z-positiong at loop: {track["z"]}")
+                    self._logger.debug(f"Z-positiong at loop: {track['z']}")
                 loop_start = tms
                 self.feedcontrol["current"] = tms
                 
@@ -834,7 +838,7 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
                         if self.b_adjust:
                             bangle = math.radians(self.current_b - self.bref) *-1
                             x = x*math.cos(bangle) + z*math.sin(bangle)
-                            z = -z*math.sin(bangle) + z*math.cos(bangle)
+                            z = -x*math.sin(bangle) + z*math.cos(bangle)
                         if self.ellipse:
                             z = z + m
                         if self.use_scan:
@@ -1035,7 +1039,7 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
             self.pump_work = self.create_working_path(self.pump_main, self.p_amp)
             #Other modifictions
             if self.pump_invert:
-                self.pump_work = np.array(self.pump_work["radii"])*-1
+                self.pump_work["radii"] = np.array(self.pump_work["radii"])*-1
             working_x = self.pump_work["radii"]
             working_angles = self.pump_work["angles"]
         else:
@@ -1101,7 +1105,7 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
         #TODO: If using B-angle, it is possible that start position X is less than end, need to take into account
         x,z,a = self.start_coords["x"], self.start_coords["z"], self.start_coords["a"]
         
-        #TODO: Need to reassess with change to rock_work/pump_work, also, this is kind of gross
+        #rock/geo only
         if (len(self.rock_work) or len(self.geo_radii)) and not len(self.pump_work):
             #assume we are just going to back and then in/out
             if self.b_adjust: #do we need to compensate for the actual B-angle?
@@ -1123,13 +1127,19 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
                 gcode.append(f"G90 G0 Z{z} A{a}")
                 return_gcode.append(f"G90 G0 SC_Z A{a}")
 
+        #pump only
         if len(self.pump_work) and not len(self.rock_work):
             gcode.append(f"G94 G90 G0 Z{z}")
             gcode.append(f"G0 X{x} A{a}")
             return_gcode.append(f"G94 G90 G0 SC_Z")
             return_gcode.append(f"G0 SC_X A{a}")
 
+        #rock and pump, need to get special cases
         if len(self.pump_work) and len(self.rock_work):
+            if self.reset_priority == "pump":
+                gcode.append(f"G94 G90 G0 Z{z}")
+            if self.reset_priority == "rock":
+                gcode.append(f"G94 G90 G0 X{x}")
             gcode.append(f"G94 G90 G0 Z{z} X{x}")
             gcode.append(f"G0 A{a}")
             return_gcode.append(f"G94 G90 G0 SC_Z SC_X")
@@ -1428,6 +1438,7 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
             return
            
         if command == "start_job":
+            self.use_scan = False
             self.rpm = float(data["rpm"])
             self.r_amp = float(data["r_amp"])
             self.p_amp = float(data["p_amp"])
