@@ -800,7 +800,7 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
                 tms = round(time.time() * 1000)
                 if loop_start:
                     self._logger.debug(f"loop time ms: {tms - loop_start}")
-                    self._logger.debug(f"Z-positiong at loop: {track["z"]}")
+                    self._logger.debug(f"Z-positiong at loop: {track['z']}")
                 loop_start = tms
                 self.feedcontrol["current"] = tms
                 
