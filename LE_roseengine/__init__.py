@@ -91,6 +91,8 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
         self.a_spline = None
         self.pump_profile = None
 
+        self.write_mode = True
+
         #geometric chuck
         self.geo = geometric.GeometricChuck()
         self.geo_radii = []
@@ -120,10 +122,10 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
         self.laser_stop = False
 
         #coordinate tracking
-        self.current_a = None
-        self.current_b = None
-        self.current_x = None
-        self.current_z = None
+        self.current_a = 0.0
+        self.current_b = 0.0
+        self.current_x = 0.0
+        self.current_z = 0.0
 
         #plotly
         self.go = go
@@ -155,6 +157,7 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
         self.geo_plunge = float(self._settings.get(["geo_plunge"]))
         self.reset_priority = self._settings.get(["reset_priority"])
         self.use_zdiff = bool(self._settings.get(["use_zdiff"]))
+        self.axis_rules = self._settings.get(["axis_rules"])
 
         storage = self._file_manager._storage("local")
         
@@ -199,7 +202,8 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
             geo_feedrate=800,
             geo_plunge=200,
             reset_priority="none",
-            use_zdiff = False
+            use_zdiff = False,
+            axis_rules=[],
             )
     
     def get_template_configs(self):
@@ -216,7 +220,7 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
 
     def get_assets(self):
         return {
-            "js": ["js/roseengine.js", "js/plotly-latest.min.js"],
+            "js": ["js/roseengine.js", "js/plotly-latest.min.js", "js/roseengine_settings.js"],
             "css": ["css/roseengine.css"],
         }
     
@@ -628,6 +632,7 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
             loop_start = None
             loop_end = None
             cmdlist = []
+            cmd_buffer = []
             #cmdlist.append("G92 A0")
             if self.laser_mode and self.laser_start:
                 lc = "M4"
@@ -720,16 +725,19 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
                             cmdlist[-1] = self._update_injection(cmdlist[-1], self.inject)
                             self.inject = None
                     # Loop until we are ready to send the next chunk
-                    tms = round(time.time() * 1000)
-                    while self.feedcontrol["next"] - tms > self.ms_threshold or self.buffer < bf_target:
-                            time.sleep(self.ms_threshold/2000)
-                            tms = round(time.time() * 1000)
-                            if not self.running:
-                                break
+                    if not self.write_mode:
+                        tms = round(time.time() * 1000)
+                        while self.feedcontrol["next"] - tms > self.ms_threshold or self.buffer < bf_target:
+                                time.sleep(self.ms_threshold/2000)
+                                tms = round(time.time() * 1000)
+                                if not self.running:
+                                    break
 
-                    #self._logger.info(f"buffer is now at {self.buffer}")
-                    self._printer.commands(cmdlist)
-                    self.buffer_received = False
+                        #self._logger.info(f"buffer is now at {self.buffer}")
+                        self._printer.commands(cmdlist)
+                        self.buffer_received = False
+                    else:
+                        cmd_buffer.extend(cmdlist)
                     #in case RPM has changed
                     degrees_sec = (self.rpm * 360) / 60
                     next_interval = int(degrees_chunk / degrees_sec * 1000)
@@ -741,7 +749,12 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
                 if self.laser and self.laser_stop:
                     self.running = False
                     self._logger.debug("Stopping from laser_stop")
+                    cmd_buffer.append("S0")
                     self._printer.commands(["S0"])
+                if self.write_mode:
+                    self.running = False
+                    self.rosette_gcode(cmd_buffer)
+                
     
         except Exception as e:
             self._logger.error(f"Exception in job thread: {e}", exc_info=True)
@@ -773,6 +786,7 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
             loop_start = None
             loop_end = None
             cmdlist = []
+            cmd_buffer = []
             #cmdlist.append("G92 A0")
             ovality_z = 0 #this is how far we have already moved Z at any point
             if self.laser_mode and self.laser_start:
@@ -895,16 +909,19 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
                             cmdlist[-1] = self._update_injection(cmdlist[-1], self.inject)
                             self.inject = None
                     # Loop until we are ready to send the next chunk
-                    tms = round(time.time() * 1000)
-                    while self.feedcontrol["next"] - tms > self.ms_threshold or self.buffer < bf_target:
-                            time.sleep(self.ms_threshold/2000)
-                            tms = round(time.time() * 1000)
-                            if not self.running:
-                                break
+                    if not self.write_mode:
+                        tms = round(time.time() * 1000)
+                        while self.feedcontrol["next"] - tms > self.ms_threshold or self.buffer < bf_target:
+                                time.sleep(self.ms_threshold/2000)
+                                tms = round(time.time() * 1000)
+                                if not self.running:
+                                    break
 
-                    #self._logger.info(f"buffer is now at {self.buffer}")
-                    self._printer.commands(cmdlist)
-                    self.buffer_received = False
+                        #self._logger.info(f"buffer is now at {self.buffer}")
+                        self._printer.commands(cmdlist)
+                        self.buffer_received = False
+                    else:
+                        cmd_buffer.extend(cmdlist)
                     #in case RPM has changed
                     degrees_sec = (self.rpm * 360) / 60
                     time_unit = self.a_inc/degrees_sec * 1000 #ms
@@ -917,7 +934,11 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
                         break
                 if self.laser and self.laser_stop:
                     self.running = False
+                    cmd_buffer.append("S0")
                     self._printer.commands(["S0"])
+                if self.write_mode:
+                    self.running = False
+                    self.rosette_gcode(cmd_buffer)
 
         except Exception as e:
             self._logger.error(f"Exception in job thread: {e}", exc_info=True)
@@ -1253,7 +1274,59 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
             for line in gcode:
                 newfile.write(f"\n{line}")
 
-            
+    def rosette_gcode(self, commands):
+        filename = time.strftime("%Y%m%d-%H%M") + "_RE.gcode"
+        path_on_disk = "{}/{}".format(self._settings.getBaseFolder("watched"), filename)
+        #going to parse for axis swapping
+
+        extras = []
+        extras.append("( Gcode created by LatheEngraver RoseEngine plugin )")
+        if self.rock_main:
+            if self.rock_main["type"] != "parametric":
+                extras.append(f"( Rock rosette, Max Radius: {self.rock_main['max_radius']:.2f}, Min. Radius: {self.rock_main['min_radius']:.2f} )")
+            else:
+                extras.append(f"( Parametric rocking Rosette )")
+            if self.rock_main["type"] == "geometric":
+                extras.append(f"( This is a geometric chuck design )")
+        if self.pump_main:
+            if self.pump_main["type"] != "parametric":
+                extras.append(f"( Pump rosette, Max Radius: {self.pump_main['max_radius']:.2f}, Min. Radius: {self.pump_main['min_radius']:.2f} )")
+            else:
+                extras.append(f"( Parametric pumping Rosette )")
+        extras.append("G94 G21")
+
+        commands.append("G94 G90")
+
+        commands[:0] = extras
+        rules = self._settings.get(["axis_rules"]) or []
+        axis_map = {}
+        sign_map = {}
+        for r in rules:
+            f = str(r.get("first","")).upper()
+            t = str(r.get("second","")).upper()
+            sg = str(r.get("sign","same")).lower()
+            if f and t:
+                axis_map[f] = t
+                sign_map[f] = -1 if sg == "inverse" else 1
+
+        token = re.compile(r'([XZAB])\s*([-+]?[0-9]*\.?[0-9]+)')
+        swapped = []
+        for line in commands:
+            def repl(m):
+                old = m.group(1)
+                val = float(m.group(2))
+                new = axis_map.get(old, old)
+                val *= sign_map.get(old, 1)
+                return f"{new}{val:.3f}"
+            swapped.append(token.sub(repl, line))
+
+        with open(path_on_disk,"w") as newfile:
+            #write in comment stuff here
+            for line in swapped:
+                newfile.write(f"\n{line}")
+        
+        self.write_mode = False
+
     def write_gcode(self):
         filename = time.strftime("%Y%m%d-%H%M") + "roseengine.gcode"
         path_on_disk = "{}/{}".format(self._settings.getBaseFolder("watched"), filename)
@@ -1439,6 +1512,7 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
            
         if command == "start_job":
             self.use_scan = False
+            self.write_mode = bool(data["wm"])
             self.rpm = float(data["rpm"])
             self.r_amp = float(data["r_amp"])
             self.p_amp = float(data["p_amp"])

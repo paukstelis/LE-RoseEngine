@@ -1,4 +1,5 @@
 <form class="form-horizontal">
+    
     <div class="control-group">
         <h3>Experimental/Development</h3>
         <label>
@@ -129,5 +130,46 @@
             <i class="icon icon-info-sign" title="Cut feed rate" data-toggle="tooltip"></i>
         </label>
         </div>
+        
+        <h3>General Gcode options</h3>
+        <h4>Axis mapping</h4>
+            Axis:
+            <select id="axis_first" class="span2">
+                  <option value="X">X</option>
+                  <option value="Z">Z</option>
+                  <option value="A">A</option>
+                  <option value="B">B</option>
+            </select>
+            becomes:
+            <select id="axis_second" class="span2">
+                  <option value="X">X</option>
+                  <option value="Y">Y</option>
+                  <option value="Z">Z</option>
+                  <option value="A">A</option>
+                  <option value="B">B</option>
+                  <option value="C">C</option>
+            </select>
+            with:
+            <select id="axis_sign" class="span2">
+                  <option value="same">Same</option>
+                  <option value="inverse">Inverse</option>
+            </select> sign.
+            <button class="btn btn-small" data-bind="click: settings.plugins.roseengine.addAxisRule">Add</button>
+
+            <div style="margin-top:8px">
+              <table class="table table-condensed">
+                <thead>
+                  <tr><th>From</th><th>To</th><th>Sign</th><th></th></tr>
+                </thead>
+                <tbody data-bind="foreach: settings.plugins.roseengine.axis_rules">
+                  <tr>
+                    <td data-bind="text: first"></td>
+                    <td data-bind="text: second"></td>
+                    <td data-bind="text: sign"></td>
+                    <td><button class="btn btn-mini btn-danger" data-bind="click: $root.settings.plugins.roseengine.removeAxisRule">Delete</button></td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
     </div>
 </form>
