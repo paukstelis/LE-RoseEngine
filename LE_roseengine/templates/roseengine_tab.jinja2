@@ -203,7 +203,7 @@
                 <i class="fa fa-trash"></i>
                 </button>
 
-                <button id="writemode" title="Write any currently loaded rosette data to a gcode file" class="btn box" style="border: 1px solid; width: 40px; height: 40px;" data-bind="click: function() {write_mode()}">
+                <button id="writemode" title="Write any currently loaded rosette data to a gcode file" class="btn box" style="border: 1px solid; width: 40px; height: 40px;" data-bind="enable: available(), click: function() {write_mode()}">
                 <i class="fa fa-file"></i>
                 </button>                
             </div>
