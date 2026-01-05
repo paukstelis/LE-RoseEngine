@@ -56,6 +56,8 @@ $(function() {
         self.recording  = ko.observable(false);
         self.lines = ko.observable(0); //number of lines written/stored
         self.relative_return = ko.observable(false);
+        self.wm = false;
+        //self.axis_rules = ko.observableArray([]);
 
         //laser
         self.laser_base = ko.observable(200);
@@ -89,7 +91,7 @@ $(function() {
             OctoPrint.files.listForLocation("local/rosette", false)
                 .done(function(data) {
                     var rosettes = data.children;
-                    console.log(rosettes);
+                    //console.log(rosettes);
                     rosettes.sort((a,b) => { return a.name.localeCompare(b.name) });
                     self.rosettes = rosettes;
                     populateFileSelector(rosettes, "#rock_file_select", "machinecode");
@@ -122,7 +124,7 @@ $(function() {
                 .done(function(data) {
                     var children = data && data.children ? data.children : [];
                     // look for the JSON file we save to
-                    console.log(children);
+                    //console.log(children);
                     var savedFile = children.find(function(f) {
                         return f.name === "saved_geos.json";
                     });
@@ -152,7 +154,7 @@ $(function() {
                                 sel.append($("<option>").text("Select saved geometric").attr("value",""));
                                 data.forEach(function(entry, i) {
                                     var label = entry.timestamp ? entry.timestamp : ("entry " + i);
-                                    console.log(label);
+                                    //console.log(label);
                                     if (entry.type) label = label + " (" + entry.type + ")";
                                     sel.append($("<option>").text(label).attr("value", i));
                                 });
@@ -168,6 +170,8 @@ $(function() {
                     self.saved_geos([]);
                 });
         };
+
+        
 
         self.loadSavedGeo = function(index) {
             var idx = parseInt(index, 10);
@@ -259,6 +263,7 @@ $(function() {
 
             self.fetchProfileFiles();
             self.fetchRosetteFiles();
+
             self.a_inc = self.settings.a_inc();
             self.geo_stages = self.settings.geo_stages();
             self.geo_points = self.settings.geo_points();
@@ -288,6 +293,7 @@ $(function() {
             var po = $('#po_span');
             var po_slider = $('#pump_offset');
             po_slider.attr("step", self.a_inc);
+
         };
 
         self.fromCurrentData = function(data) {
@@ -692,6 +698,13 @@ $(function() {
                 });
         }
 
+        self.write_mode = function() {
+            self.wm = true;
+            self.startjob();
+            self.wm = false;
+
+        }
+
         self.record = function(operation) {
             var data = {
                 op: operation,
@@ -796,6 +809,7 @@ $(function() {
                 radial_depth: self.radial_depth(),
                 pump_profile: self.pump_profile,
                 gcode_geo: self.gcode_geo(),
+                wm: self.wm,
                
 
             };
@@ -973,5 +987,6 @@ $(function() {
         construct: RoseengineViewModel,
         dependencies: ["settingsViewModel", "filesViewModel",  "accessViewModel","loginStateViewModel",],
         elements: [ "#tab_plugin_roseengine", ]
+
     });
 });
