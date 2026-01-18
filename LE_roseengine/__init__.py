@@ -91,7 +91,8 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
         self.a_spline = None
         self.pump_profile = None
 
-        self.write_mode = True
+        self.write_mode = False
+        self.inch = False
 
         #geometric chuck
         self.geo = geometric.GeometricChuck()
@@ -158,6 +159,7 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
         self.reset_priority = self._settings.get(["reset_priority"])
         self.use_zdiff = bool(self._settings.get(["use_zdiff"]))
         self.axis_rules = self._settings.get(["axis_rules"])
+        self.inch = self._settings.get(["inch"])
 
         storage = self._file_manager._storage("local")
         
@@ -204,6 +206,7 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
             reset_priority="none",
             use_zdiff = False,
             axis_rules=[],
+            inch=False,
             )
     
     def get_template_configs(self):
@@ -272,7 +275,7 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
         radii = np.array(rl)
         radii = np.append(radii,radii[0])
         angles = np.array(an)
-        angles = np.append(angles, 0.0)
+        angles = np.append(angles, 360.0)
         angles = np.deg2rad(angles)
         angles = np.unwrap(angles)
         angles = np.degrees(angles)
@@ -322,10 +325,6 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
         min_radius = np.min(radii)
         max_idx = np.argmax(radii)
 
-        #self._logger.debug(radii)
-        #self._logger.debug("Rolled angles")
-        #self._logger.debug(angles)
-            
         rosette = {
             "radii": radii,
             "angles": angles,
@@ -554,6 +553,7 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
                 angles = angles[::-1]
                 angle_offset = angles[0]
                 angles = (angles - angle_offset) % 360
+                self._logger.debug("Angle Jump!")
         
         if (
             len(radii) > 1 and
@@ -562,8 +562,10 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
         ):
             radii = radii[:-1]
             angles = angles[:-1]
+            self._logger.debug("Removing last point...")
          
         expected_points = int(360 / self.a_inc)
+        self._logger.debug(f"Expected points: {expected_points}, angle length: {len(angles)}")
         uniform_angles = np.arange(0, 360, self.a_inc)
         
         if len(angles) < expected_points:
@@ -869,7 +871,7 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
                             arc = track["z"] * math.radians(self.a_inc)
                             chunk_distance = chunk_distance + math.sqrt(arc**2 + x**2 + z**2)
 
-                        cmdlist.append(f"G93 G91 G1 X{x:0.3f} A{a:0.3f} Z{z:0.3f} F{feed:0.1f}")
+                        cmdlist.append(f"G93 G91 G1 X{x:0.4f} A{a:0.3f} Z{z:0.4f} F{feed:0.1f}")
                     
                     if self.laser and chunk_distance and self.power_correct:
                         #figure out scaling of power here
@@ -1106,9 +1108,9 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
         self.start_coords["z"] = self.current_z
         self.start_coords["a"] = self.current_a
         self.running = True
-        self._logger.debug(working_z)
-        self._logger.debug(working_angles)
-        self._logger.debug(working_x)
+        self._logger.debug(f"Sum of Z movements: {np.sum(working_z)}")
+        #self._logger.debug(working_angles)
+        self._logger.debug(f"Sum of X movements: {np.sum(working_x)}")
         self.jobThread = threading.Thread(target=self._job_thread).start()
 
     def _reset_gcode(self):
@@ -1273,6 +1275,7 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
             #write in comment stuff here
             for line in gcode:
                 newfile.write(f"\n{line}")
+        self._plugin_manager.send_plugin_message('latheengraver',  dict(type='filerefresh'))
 
     def rosette_gcode(self, commands):
         filename = time.strftime("%Y%m%d-%H%M") + "_RE.gcode"
@@ -1294,10 +1297,24 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
             else:
                 extras.append(f"( Parametric pumping Rosette )")
         extras.append("G94 G21")
-
         commands.append("G94 G90")
 
-        commands[:0] = extras
+        # unit conversion prior to applying axis rules
+        if self.inch:
+            extras.append("( Converting X/Z from mm to inches )")
+            extras.append("G20")
+            mm_to_in = 1.0 / 25.4
+            # convert only X and Z numeric values, leave A/B/F untouched
+            conv_token = re.compile(r'([XZ])\s*([-+]?[0-9]*\.?[0-9]+)')
+            converted = []
+            for line in commands:
+                def conv_repl(m):
+                    axis = m.group(1)
+                    val = float(m.group(2)) * mm_to_in
+                    return f"{axis}{val:.6f}"
+                converted.append(conv_token.sub(conv_repl, line))
+            commands = converted
+ 
         rules = self._settings.get(["axis_rules"]) or []
         axis_map = {}
         sign_map = {}
@@ -1305,10 +1322,12 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
             f = str(r.get("first","")).upper()
             t = str(r.get("second","")).upper()
             sg = str(r.get("sign","same")).lower()
+            extras.append(f"( Original {f} axis is now {t} with {sg} sign )")
             if f and t:
                 axis_map[f] = t
                 sign_map[f] = -1 if sg == "inverse" else 1
 
+        commands[:0] = extras
         token = re.compile(r'([XZAB])\s*([-+]?[0-9]*\.?[0-9]+)')
         swapped = []
         for line in commands:
@@ -1317,7 +1336,10 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
                 val = float(m.group(2))
                 new = axis_map.get(old, old)
                 val *= sign_map.get(old, 1)
-                return f"{new}{val:.3f}"
+                if not self.inch:
+                    return f"{new}{val:.4f}"
+                else:
+                    return f"{new}{val:.6f}"
             swapped.append(token.sub(repl, line))
 
         with open(path_on_disk,"w") as newfile:
@@ -1326,6 +1348,7 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
                 newfile.write(f"\n{line}")
         
         self.write_mode = False
+        self._plugin_manager.send_plugin_message('latheengraver',  dict(type='filerefresh'))
 
     def write_gcode(self):
         filename = time.strftime("%Y%m%d-%H%M") + "roseengine.gcode"
@@ -1338,6 +1361,7 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
             for line in self.recorded:
                 newfile.write(f"\n{line}")
         self.recorded = []
+        self._plugin_manager.send_plugin_message('latheengraver',  dict(type='filerefresh'))
 
     def is_api_protected(self):
         return True
