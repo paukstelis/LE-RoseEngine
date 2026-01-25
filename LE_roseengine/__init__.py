@@ -71,6 +71,7 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
         self.p_amp = 1.0
         self.pump_invert = False
         self.forward = True
+        self.i_feed = 0
 
         self.auto_reset = False
         self.relative_return = False
@@ -160,6 +161,7 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
         self.use_zdiff = bool(self._settings.get(["use_zdiff"]))
         self.axis_rules = self._settings.get(["axis_rules"])
         self.inch = self._settings.get(["inch"])
+        self.i_feed = float(self._settings.get(["i_feed"]))
 
         storage = self._file_manager._storage("local")
         
@@ -207,6 +209,7 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
             use_zdiff = False,
             axis_rules=[],
             inch=False,
+            i_feed=0,
             )
     
     def get_template_configs(self):
@@ -396,6 +399,17 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
         pattern = re.compile(rf'({axis})([-+]?[0-9]*\.?[0-9]+)')
         orig_cmd = cmd
         match = pattern.search(cmd)
+        insert_pattern = re.compile(r'(F)\s*([-+]?[0-9]*\.?[0-9]+)')
+        insert_match = insert_pattern.search(cmd)
+
+        if self.i_feed and insert_match:
+            old_f = float(insert_match.group(2))
+            new_f = old_f / self.i_feed
+            def repl_f(m):
+                return f"{m.group(1)}{new_f:.1f}"  # keep 'F' and replace numeric
+            cmd = insert_pattern.sub(repl_f, cmd, count=1)
+            self._logger.info(f"Injected feed ratemod: {new_f} and command: {cmd}")
+
         if match:
             # Axis already exists, add delta to existing value
             old_val = float(match.group(2))
@@ -404,8 +418,6 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
             cmd = pattern.sub(f"{axis}{new_val:.4f}", cmd, count=1)
         else:
             # Axis doesn't exist, insert before F command
-            insert_pattern = re.compile(r'(F[-+]?[0-9]*\.?[0-9]+)')
-            insert_match = insert_pattern.search(cmd)
             insert_str = f"{axis}{delta:.4f} "
             if insert_match:
                 # Insert before F
