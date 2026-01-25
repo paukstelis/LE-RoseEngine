@@ -26,6 +26,10 @@
             <i class="icon icon-info-sign" title="If buffer is above threshold and if calculated time for next chunk is less than this value, next command chunk is sent." data-toggle="tooltip"></i>
         </label>
         <label>
+            <input type="number" step="1" min="0" max="100" class="input-mini" data-bind="numeric, value: settings.plugins.roseengine.i_feed"> Injected command feed divisor
+            <i class="icon icon-info-sign" title="Adjust speed of moves that include injected commands. Divides nominal feed by this value. 0 ignores." data-toggle="tooltip"></i>
+        </label>
+        <label>
             <input type="checkbox" data-bind="checked: settings.plugins.roseengine.auto_reset">  Auto-reset on stop
             <i class="icon icon-info-sign" title="Return to start position each time a run is stopped." data-toggle="tooltip"></i>
         </label>
@@ -33,6 +37,7 @@
             <input type="checkbox" data-bind="checked: settings.plugins.roseengine.relative_return">  Return to relative start position during recording
             <i class="icon icon-info-sign" title="Uses markers to return to relative (not absolute) position during recording." data-toggle="tooltip"></i>
         </label>
+
 
         <label title="When rocking and pumping are used simulatenously, the axis associated with this function is reset first">Reset Priority:
                             <select id="reset_prior" data-bind="value: settings.plugins.roseengine.reset_priority">
@@ -170,6 +175,12 @@
                   </tr>
                 </tbody>
               </table>
+            </div>
+            <div>
+                <label>
+                    <input type="checkbox" data-bind="checked: settings.plugins.roseengine.inch">  Convert to Inches (G20)
+                    <i class="icon icon-info-sign" title="Convert to inches when writing gcode" data-toggle="tooltip"></i>
+                </label>
             </div>
     </div>
 </form>

@@ -8,6 +8,7 @@ $(function() {
     function RoseengineViewModel(parameters) {
         var self = this;
         self.global_settings = parameters[0];
+        self.files = parameters[1];
         self.available = ko.observable(true); //Can we interact with this plugin
         self.running = ko.observable(false);
         self.is_printing = ko.observable(false);
@@ -702,6 +703,7 @@ $(function() {
             self.wm = true;
             self.startjob();
             self.wm = false;
+            self.files.requestData({ force: true });
 
         }
 
@@ -787,6 +789,7 @@ $(function() {
 
             self.gcode_geo(true);
             self.startjob();
+            self.files.requestData({ force: true });
 
         }
 
