@@ -54,6 +54,7 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
         #self.modifiers = {"amp": 1, "phase": 0, "forward": True}
         np.set_printoptions(suppress=True,precision=3)
         self.b_adjust = False
+        self.moveB = False
         self.bref = 0.0
 
         self.jobThread = None
@@ -242,7 +243,6 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
             self._plugin_manager.send_plugin_message("roseengine", data)
 
     def get_position(self, event, payload):
-        #self._logger.info(payload)
         self.current_x = payload["x"]
         self.current_z = payload["z"]
         self.current_a = payload["a"]
@@ -395,10 +395,8 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
 
     def _update_injection(self, cmd: str, axis_val: tuple) -> str:
         axis, delta = axis_val
-        # Regex pattern to find axis (e.g., A, Z, etc.)
-        pattern = re.compile(rf'({axis})([-+]?[0-9]*\.?[0-9]+)')
         orig_cmd = cmd
-        match = pattern.search(cmd)
+
         insert_pattern = re.compile(r'(F)\s*([-+]?[0-9]*\.?[0-9]+)')
         insert_match = insert_pattern.search(cmd)
 
@@ -406,26 +404,37 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
             old_f = float(insert_match.group(2))
             new_f = old_f / self.i_feed
             def repl_f(m):
-                return f"{m.group(1)}{new_f:.1f}"  # keep 'F' and replace numeric
+                return f"{m.group(1)}{new_f:.1f}"
             cmd = insert_pattern.sub(repl_f, cmd, count=1)
             self._logger.info(f"Injected feed ratemod: {new_f} and command: {cmd}")
 
-        if match:
-            # Axis already exists, add delta to existing value
-            old_val = float(match.group(2))
-            new_val = old_val + delta
-            # Replace old value with new value (formatted to 4 decimal places)
-            cmd = pattern.sub(f"{axis}{new_val:.4f}", cmd, count=1)
-        else:
-            # Axis doesn't exist, insert before F command
-            insert_str = f"{axis}{delta:.4f} "
-            if insert_match:
-                # Insert before F
-                idx = insert_match.start()
-                cmd = cmd[:idx] + insert_str + cmd[idx:]
+        axis_updates = [(axis, delta)]
+        if self.moveB and axis in ("X", "Z"):
+            b_angle = math.radians(self.bref - self.current_b) *-1
+            self._logger.debug(f"Calculated b-angle: {np.angle(b_angle)}")
+            x_delta = delta * math.cos(b_angle)
+            z_delta = delta * math.sin(b_angle)
+            axis_updates = [("X", x_delta), ("Z", z_delta)]
+            self._logger.debug(f"moveB active: axis={axis}, delta={delta}, B={self.current_b}, Xcomp={x_delta:.4f}, Zcomp={z_delta:.4f}")
+        
+        for ax, dval in axis_updates:
+            if abs(dval) < 1e-6:
+                continue
+            ax_pattern = re.compile(rf'({ax})([-+]?[0-9]*\.?[0-9]+)')
+            match = ax_pattern.search(cmd)
+            if match:
+                old_val = float(match.group(2))
+                new_val = old_val + dval
+                cmd = ax_pattern.sub(f"{ax}{new_val:.4f}", cmd, count=1)
             else:
-                # Append at end if F not found
-                cmd += ' ' + insert_str.strip()
+                insert_str = f"{ax}{dval:.4f} "
+                insert_match = insert_pattern.search(cmd)
+                if insert_match:
+                    idx = insert_match.start()
+                    cmd = cmd[:idx] + insert_str + cmd[idx:]
+                else:
+                    cmd = cmd.rstrip() + ' ' + insert_str.strip()
+
         self._logger.info(f"injected, orig: {orig_cmd}, new: {cmd}")
         return cmd
     
@@ -789,9 +798,10 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
             #determine absolute value at this position from main
             zero_pump = self.pump_main["radii"][0]
             pump_rad_start = zero_pump - self.pump_main["radii"][roll]
-            self._logger.debug(f"pump phase offset X value: {pump_rad_start}")
-            self.working_x[:, 1] = np.roll(self.working_x[:, 1], roll)
-            phasecmds.append(f"G0 G91 X{pump_rad_start:0.3f}")
+            
+            self.working_x = np.roll(self.working_x, roll)
+            phasecmds.append(f"G0 G91 X{pump_rad_start:0.4f}")
+            self._logger.debug(f"pump phase offset X value: {pump_rad_start}, phasecmds: {phasecmds}")
 
         try:
             bf_target = self.bf_target
@@ -810,8 +820,9 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
                 cmdlist.append(f"{lc} S{self.laser_base}")
                 self.laser = True
             #cmdlist.append("M3 S1000")
-            if len(phasecmds):
+            if len(phasecmds) > 0:
                 cmdlist.extend(phasecmds)
+                self._logger.debug(f"Phase commands added, cmdlist is: {cmdlist}")
             track = {"x": self.start_coords["x"], "z": self.start_coords["z"], "a": self.start_coords["a"]}
             
             if not self.forward:
@@ -1557,6 +1568,7 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
             self.pump_offset = float(data["pump_offset"])
             self.b_adjust = bool(data["b_adjust"])
             self.bref = float(data["bref"])
+            self.moveB = bool(data["moveb"])
             self.laser_base = int(data["laser_base"]) #should these be dynamic?
             self.laser_feed = int(data["laser_feed"])
             self.radial_depth = float(data["radial_depth"])
@@ -1661,6 +1673,7 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
             return
 
         if command == "update_rpm":
+            self.moveB = bool(data["moveb"])
             with self.rpm_lock:
                 self.updated_rpm = float(data["rpm"])
             return
