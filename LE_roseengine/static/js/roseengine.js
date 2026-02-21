@@ -42,6 +42,7 @@ $(function() {
         self.e_ratio = ko.observable(1.0);
         self.b_adjust = ko.observable(0);
         self.bref = ko.observable(-90.0);
+        self.moveb = ko.observable(false);
 
         self.stages = ko.observableArray([]);
         self.geo_stages = ko.observable(2);
@@ -363,6 +364,12 @@ $(function() {
         });
 
         $("#rpm").on("change", function() {
+
+            self.update_rpm();
+
+        });
+
+        $("#moveb").on("change", function() {
 
             self.update_rpm();
 
@@ -807,6 +814,7 @@ $(function() {
                 e_ratio: self.e_ratio(),
                 b_adjust: self.b_adjust(),
                 bref: self.bref(),
+                moveb: self.moveb(),
                 laser_base: self.laser_base(),
                 laser_feed: self.laser_feed(),
                 radial_depth: self.radial_depth(),
@@ -865,7 +873,8 @@ $(function() {
 
         self.update_rpm = function()  {
             var data = {
-                rpm: self.rpm()
+                rpm: self.rpm(),
+                moveb: self.moveb()
             };
 
             OctoPrint.simpleApiCommand("roseengine", "update_rpm", data)
@@ -962,6 +971,13 @@ $(function() {
                 } else {
                     button.click();
                 }
+            }
+        };
+
+        self.onTabChange = function(current, previous) {
+            if (current === "#tab_plugin_roseengine") {
+                if (self.pump_profile === "None") { self.fetchProfileFiles(); }
+                self.fetchRosetteFiles();   // svg rosettes
             }
         };
 
