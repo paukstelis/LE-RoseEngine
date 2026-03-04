@@ -92,6 +92,12 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
         self.spline = None
         self.a_spline = None
         self.pump_profile = None
+        #Curvilinear parameters
+        self.curve = {"active" : False, "diff" : []}
+        self.curve_mm_rev = 2.0
+        self.curve_recip = True
+        self.curve_stepdown = 0.0
+        self.curve_dir = "l2r"
 
         self.write_mode = False
         self.inch = False
@@ -163,6 +169,8 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
         self.axis_rules = self._settings.get(["axis_rules"])
         self.inch = self._settings.get(["inch"])
         self.i_feed = float(self._settings.get(["i_feed"]))
+        self.curve_mm_rev = float(self._settings.get(["mm_rev"]))
+        self.curve_stepdown = float(self._settings.get(["curve_stepdown"]))
 
         storage = self._file_manager._storage("local")
         
@@ -211,6 +219,8 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
             axis_rules=[],
             inch=False,
             i_feed=0,
+            mm_rev=2.0,
+            curve_stepdown=0.0,
             )
     
     def get_template_configs(self):
@@ -270,8 +280,13 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
         return (math.degrees(angle_rad) + 360) % 360
 
     def distance_from_center(self, x, y, cx, cy):
-        return math.hypot(x - cx, y - cy)      
-    
+        return math.hypot(x - cx, y - cy)
+
+    def load_curve(self, SVG):
+        #pass path to SVG, get curve
+        profiles.convert_svg(self, SVG)
+        self.curve["active"] = True
+
     def create_working_path(self, rosette, amp):
         rl = rosette["radii"]
         an = rosette["angles"]
@@ -827,11 +842,9 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
             
             if not self.forward:
                 self.working_angles = self.working_angles*-1
-                #self.working_x = np.flip(self.working_x)
-                #self.working_z = np.flip(self.working_z)
-                #self.working_mod = np.flip(self.working_mod)
 
             while self.running:
+
                 self.buffer = 0
                 degrees_sec = (self.rpm * 360) / 60
                 degrees_chunk = self.chunk * self.a_inc
@@ -840,6 +853,9 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
                 if loop_start:
                     self._logger.debug(f"loop time ms: {tms - loop_start}")
                     self._logger.debug(f"Z-positiong at loop: {track['z']}")
+                    if self.curve["active"]:
+                        idx = self.curve["idx"]
+                        self._logger.debug(f"curve idx: {idx} curve X: {self.curve['x'][idx]} curve Z: {self.curve['z'][idx]}")
                 loop_start = tms
                 self.feedcontrol["current"] = tms
                 
@@ -861,6 +877,30 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
                     achunk = self.working_angles[i:i+self.chunk]
                     xchunk = self.working_x[i:i+self.chunk]
                     modchunk = self.working_mod[i:i+self.chunk]
+                    curvechunk = []
+                    if self.curve["active"]:
+                        diffs = self.curve["diffs"]
+                        dirn = self.curve["dir"]
+                        while len(curvechunk) < len(achunk):
+                            idx = self.curve["idx"]
+                            need = len(achunk) - len(curvechunk)
+                            take = diffs[idx:idx + need]
+                            curvechunk.extend(take)
+                            self.curve["idx"] = idx + len(take)
+                            if self.curve["idx"] >= len(diffs):
+                                self.curve["dir"] = dirn*-1
+                                self.curve["idx"] = 0
+                                self.curve["diffs"] = np.flip(diffs * -1)
+                                #these are just for record keeping
+                                self.curve["x"] = np.flip(self.curve["x"])
+                                self.curve["z"] = np.flip(self.curve["z"])
+                                if self.curve_stepdown and not self.inject:
+                                    self.inject = ("Z", -float(self.curve_stepdown))
+                                    self._logger.debug("Pass done, injecting step down")
+                                continue
+                        curvechunk = curvechunk[:len(achunk)]
+                    else:
+                        curvechunk = []
                     chunk_distance = 0
                     #tofix
                     current_angle = track["a"]
@@ -878,8 +918,16 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
                             bangle = math.radians(self.current_b - self.bref) *-1
                             x = x*math.cos(bangle) + z*math.sin(bangle)
                             z = -x*math.sin(bangle) + z*math.cos(bangle)
+
                         if self.ellipse:
                             z = z + m
+
+                        if len(curvechunk):
+                            try:
+                                z = z + curvechunk[c]
+                                x = x + (self.curve["xstep"] * self.curve["dir"])
+                            except:
+                                self._logger.info(f"Curve step out of range must be reversing, direction is now {self.curve['dir']}")
                         if self.use_scan:
                             #just assume we are doing pumping
                             zdiff = profiles.ovality_mod(self,track["x"],track["a"])
@@ -889,6 +937,7 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
                             z = z + delta_ov
                             ovality_z = zdiff
                             #self._logger.info(f"Zdiff is {zdiff} delta_ov is {delta_ov}")
+                        
                         if self.laser_mode and self.laser:
                             #calculate the chunk distance
                             arc = track["z"] * math.radians(self.a_inc)
@@ -1100,6 +1149,18 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
         else:
             working_z = np.zeros_like(self.pump_main["radii"])
 
+        #handle curvilinear
+        if self.curve["active"] and len(self.curve["x"]):
+            self.curve["idx"] = 0
+            self.curve["diffs"] = np.diff(self.curve["z"])
+            self._logger.debug(self.curve["diffs"])
+            if self.curve_dir == -1:
+                self.curve["diffs"] = np.flip(self.curve["diffs"]*-1)
+                self.curve["dir"] = -1
+            else:
+                self.curve["dir"] = 1
+
+
         if self.ellipse:
             e_vals = []
             for deg in np.arange(0, 360, self.a_inc):
@@ -1244,6 +1305,37 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
         )
 
         return fig.to_plotly_json()
+    
+    def _plot_curve(self,lc):
+        fig = self.go.Figure()
+        fig.add_trace(go.Scatter(
+            x=[round(v, 1) for v in self.curve["x"]],
+            y=[round(v, 1) for v in self.curve["z"]],
+            mode='lines',
+            line_color=lc,   
+        ))
+
+        fig.update_yaxes(
+            scaleanchor="x",
+            scaleratio=1,
+            autorange="reversed"
+        )
+
+        fig.update_layout(
+            margin = dict(
+            l=30,
+            r=30,
+            b=10,
+            t=40,
+            pad=4
+            ),
+            showlegend=False,
+            title=dict()
+            
+        )
+
+        return fig.to_plotly_json()
+        self._logger.debug("plotting curve as pump")
     
     def geo_gcode(self, radii, angles):
         self.geo_gcode = False
@@ -1403,7 +1495,8 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
             geometric=[],
             recording=[],
             laser=[],
-            save_geo=[]
+            save_geo=[],
+            curve=[],
         )
     
     def on_api_command(self, command, data):
@@ -1419,7 +1512,9 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
             if type == "rock":
                 self.rock_main = rosette
                 r = list(self.rock_main["radii"])
+                r.append(r[0])
                 a = list(self.rock_main["angles"])
+                a.append(a[0])
                 json_figure = self._plotly_json(r,a,self.rock_main["max_radius"],minrad=self.rock_main["min_radius"],lc="blue")
                 #data = dict(type="rock", special=s, radii=r, angles=a, maxrad=self.rock_main["max_radius"], minrad=self.rock_main["min_radius"])
                 data = dict(type="rock", special=s, graph=json_figure)
@@ -1427,7 +1522,9 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
             elif type == "pump":
                 self.pump_main = rosette
                 r = list(self.pump_main["radii"])
+                r.append(r[0])
                 a = list(self.pump_main["angles"])
+                a.append(a[0])
                 json_figure = self._plotly_json(r,a,self.pump_main["max_radius"],minrad=self.pump_main["min_radius"],lc="green")
                 data = dict(type="pump", special=s, graph=json_figure)
                 #data = dict(type="pump", special=s, radii=r, angles=a, maxrad=self.pump_main["max_radius"], minrad=self.pump_main["min_radius"])
@@ -1467,7 +1564,9 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
             maxrad=int(amp)+50
             minrad=int(amp)
             r = list(r)
+            r.append(r[0])
             a = list(a)
+            a.append(a[0])
             json_figure = self._plotly_json(r,a,maxrad,minrad,lc=lc)
             returndata = dict(type=rose_type, radii=r, angles=a, special=False, graph=json_figure)
             self._plugin_manager.send_plugin_message('roseengine', returndata)
@@ -1503,7 +1602,15 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
             returndata = dict(type="geo", special=s, graph=json_figure)
             self._plugin_manager.send_plugin_message('roseengine', returndata) 
 
-        
+        if command == "curve":
+            path = data["path"]
+            self._logger.debug(f"Got curve path {path}")
+            if path is not "None":
+                self.load_curve(path)
+                json_figure = self._plot_curve(lc="black")
+                returndata = dict(type="curve", graph=json_figure)
+                self._plugin_manager.send_plugin_message('roseengine', returndata)
+
         if command == "save_geo":
             """
             Append current geometric chuck definition to uploads/rosette/saved_geos.json
@@ -1573,7 +1680,8 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
             self.laser_feed = int(data["laser_feed"])
             self.radial_depth = float(data["radial_depth"])
             self.pump_profile = data["pump_profile"]
-            self.gcode_geo = bool(data["gcode_geo"]) 
+            self.gcode_geo = bool(data["gcode_geo"])
+            self.curve_dir = int(data["curve_dir"]) 
             self._logger.info("ready to start job")
             if float(data["e_ratio"]) > 1.0 and not self.rock_main["type"] == "geometric":
                 rad = float(data["e_rad"])
@@ -1670,10 +1778,17 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
             if data["type"] == "pump":
                 self.pump_main = []
                 self.pump_work = []
+                self.curve = {"active": False, "diff": []}
             return
 
         if command == "update_rpm":
+            #coop update_rpm for other things
             self.moveB = bool(data["moveb"])
+            #curvilinear clutch
+            if self.curve["active"] and bool(data["clutch"]) == False:
+                self.curve["active"] = False
+            if not self.curve["active"] and bool(data["clutch"]) == True:
+                self.curve["active"] = True
             with self.rpm_lock:
                 self.updated_rpm = float(data["rpm"])
             return

@@ -2,6 +2,7 @@ import os
 import time
 import math
 import numpy as np
+from svgpathtools import svg2paths, Path
 from scipy.interpolate import CubicSpline
 from scipy.interpolate import RectBivariateSpline
 from scipy.integrate import quad
@@ -98,3 +99,47 @@ def ovality_mod(_plugin, x, a_deg):
     else:
         return adiff
 
+def convert_svg(_plugin, SVG_FILE):
+    folder = _plugin._settings.getBaseFolder("uploads")
+    filename = f"{folder}/{SVG_FILE}"
+    paths, attributes = svg2paths(filename)
+    if not paths:
+        raise ValueError("No paths in SVG")
+
+    profile_path = None
+    axis_path = None
+
+    for path, attr in zip(paths, attributes):
+        pid = attr.get("id", "").lower()
+        if pid == "axis":
+            axis_path = path
+        else:
+            profile_path = path
+
+    if profile_path is None:
+        raise ValueError("No profile path found in SVG")
+    xmin, xmax, ymin, ymax = profile_path.bbox()
+    #total x distance in mm
+    xdist = abs(xmax - xmin)
+    zdist = abs(ymax - ymin)
+    samples_per_rev = max(1, int(round(360 / _plugin.a_inc)))
+    mm_per_step = _plugin.curve_mm_rev / samples_per_rev
+    samples = int(xdist / mm_per_step)
+    _plugin._logger.debug(f"Calculating curvilinear path samples. spr: {samples_per_rev}, mm_step: {mm_per_step}, samples: {samples}")
+    t_vals = np.linspace(0.0, 1.0, samples)
+    curve_pts = np.array([profile_path.point(t) for t in t_vals])
+    x_design = curve_pts.real - xmin
+    z_design = curve_pts.imag
+    z_design = z_design - ymin
+    svgspline = CubicSpline(x_design, z_design)
+    sample_positions = np.arange(samples, dtype=float) * mm_per_step
+    sample_positions = np.clip(sample_positions, 0.0, xdist)
+    curve_z = svgspline(sample_positions)
+    _plugin.curve["xstep"] = mm_per_step
+    _plugin.curve["xdist"] = xdist
+    _plugin.curve["zdist"] = zdist
+    _plugin.curve["x"] = sample_positions #probably only need to store this for coordinate case...
+    _plugin.curve["z"] = curve_z
+    _plugin._logger.debug(_plugin.curve)
+
+   

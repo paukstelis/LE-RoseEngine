@@ -51,6 +51,18 @@
         <input type="checkbox" data-bind="checked: settings.plugins.roseengine.use_zdiff">   Use positional Z-difference with X-scans
         </label>
 
+        <h3>Curvilinear Options</h3>
+
+            <label>
+            <input type="number" step="any" min="0" max="200" class="input-mini" data-bind="numeric, value: settings.plugins.roseengine.mm_rev"> Millimeter per revolution
+            <i class="icon icon-info-sign" title="The X distance traversed per revolution." data-toggle="tooltip"></i>
+            </label>
+            <label>
+            <input type="number" step="any" min="0" max="200" class="input-mini" data-bind="numeric, value: settings.plugins.roseengine.curve_stepdown"> Step down per pass (mm)
+            <i class="icon icon-info-sign" title="The Z distance to step down per traversal of the pattern" data-toggle="tooltip"></i>
+            </label>
+
+
         <h3>Laser options</h3>
         <label>
             <input type="checkbox" data-bind="checked: settings.plugins.roseengine.power_correct">  Perform laser power correction based on calculated linear movements
