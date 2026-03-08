@@ -61,6 +61,7 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
         self.buffer = None
         self.feedcontrol =  {"current": 0, "next": 0}
         self.start_coords = {"x": None, "z": None, "a": None}
+        self.cum_inject = {"X": 0.0, "Z": 0.0}
         self.ms_threshold = 100
         self.bf_target = 60
 
@@ -450,6 +451,11 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
                 else:
                     cmd = cmd.rstrip() + ' ' + insert_str.strip()
 
+            if ax in self.cum_inject:
+                self.cum_inject[ax] += dval
+                self._logger.debug(f"cum_inject[{ax}] = {self.cum_inject[ax]:.4f}")
+                data = dict(title="Injected distances", text=f"X={self.cum_inject['X']}, Z={self.cum_inject['Z']}", hide=False, type="info")
+                self.send_le_error(data, replace=True)
         self._logger.info(f"injected, orig: {orig_cmd}, new: {cmd}")
         return cmd
     
@@ -1816,14 +1822,28 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
                 self._logger.debug("Removed existing gcode")
                 return
             
-    def send_le_error(self, data):
-        
+    def send_le_error(self, data, replace=False):
+        hide = data.get("hide", True)
+        delay = data.get("delay", 10000)
+
+        if replace:
+            # dismiss any existing notification with this title first
+            dismiss = dict(
+                type="simple_notify",
+                title=data["title"],
+                text="",
+                hide=True,
+                delay=1,
+                notify_type=data["type"]
+            )
+            self._plugin_manager.send_plugin_message("latheengraver", dismiss)
+
         payload = dict(
             type="simple_notify",
             title=data["title"],
             text=data["text"],
-            hide=True,
-            delay=10000,
+            hide=hide,
+            delay=delay,
             notify_type=data["type"]
         )
 
