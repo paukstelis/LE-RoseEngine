@@ -172,6 +172,7 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
         self.i_feed = float(self._settings.get(["i_feed"]))
         self.curve_mm_rev = float(self._settings.get(["mm_rev"]))
         self.curve_stepdown = float(self._settings.get(["curve_stepdown"]))
+        self.show_injects = bool(self._settings.get(["show_injects"]))
 
         storage = self._file_manager._storage("local")
         
@@ -222,6 +223,7 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
             i_feed=0,
             mm_rev=2.0,
             curve_stepdown=0.0,
+            show_injects=True
             )
     
     def get_template_configs(self):
@@ -451,11 +453,12 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
                 else:
                     cmd = cmd.rstrip() + ' ' + insert_str.strip()
 
-            if ax in self.cum_inject:
+            if ax in self.cum_inject and self.show_injects:
                 self.cum_inject[ax] += dval
                 self._logger.debug(f"cum_inject[{ax}] = {self.cum_inject[ax]:.4f}")
-                data = dict(title="Injected distances", text=f"X={self.cum_inject['X']}, Z={self.cum_inject['Z']}", hide=False, type="info")
-                self.send_le_error(data, replace=True)
+                self._plugin_manager.send_plugin_message("latheengraver", dict(type='clear_all'))
+                data = dict(title="Injected distances", text=f"Cumulative injected distance since last start\nX={self.cum_inject['X']:0.3f}, Z={self.cum_inject['Z']:0.3f}", hide=False, type="info")
+                self.send_le_error(data)
         self._logger.info(f"injected, orig: {orig_cmd}, new: {cmd}")
         return cmd
     
@@ -810,6 +813,8 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
 #TODO: rework this. Yuck. if using radial offset have to figure out how to handle angles with rock+pump. May need to move to using python plotly for everything
     def _job_thread(self):  
         self._logger.info("Starting job thread")
+        self._plugin_manager.send_plugin_message("latheengraver", dict(type='clear_all'))
+        self.cum_inject = {"X": 0.0, "Z" : 0.0}
         #phase offsets applied here to the working array
         phasecmds = []
         pump_rad_start = 0
@@ -1822,21 +1827,9 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
                 self._logger.debug("Removed existing gcode")
                 return
             
-    def send_le_error(self, data, replace=False):
+    def send_le_error(self, data):
         hide = data.get("hide", True)
         delay = data.get("delay", 10000)
-
-        if replace:
-            # dismiss any existing notification with this title first
-            dismiss = dict(
-                type="simple_notify",
-                title=data["title"],
-                text="",
-                hide=True,
-                delay=1,
-                notify_type=data["type"]
-            )
-            self._plugin_manager.send_plugin_message("latheengraver", dismiss)
 
         payload = dict(
             type="simple_notify",
