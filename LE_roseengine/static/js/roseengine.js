@@ -53,6 +53,10 @@ $(function() {
 
         //Profiles
         //self.pump_profile = ko.observable()
+        //self.mm_rev = ko.observable(1.0);
+        self.curvilinear = ko.observable(false);
+        self.clutch = ko.observable(true);
+        self.curve_dir = ko.observable(1);
 
         //Recording
         self.recording  = ko.observable(false);
@@ -83,6 +87,23 @@ $(function() {
                     });
                     //self.scans = scans;
                     populateFileSelector(scans, "#scan_pump_select", "machinecode");
+                })
+                .fail(function() {
+                    console.error("Failed to fetch scan files");
+                });
+        };
+
+        self.fetchCurveFiles = function() {
+            OctoPrint.files.listForLocation("local/scans", false)
+                .done(function(data) {
+                    self.curvilinear(false);
+                    var scans = data.children || [];
+                    // keep only files whose name starts with "X"
+                    scans = scans.filter(function(f) {
+                        return typeof f.name === "string" && f.name.endsWith("svg");
+                    });
+                    //self.scans = scans;
+                    populateFileSelector(scans, "#curve_select", "machinecode");
                 })
                 .fail(function() {
                     console.error("Failed to fetch scan files");
@@ -261,9 +282,11 @@ $(function() {
             self.is_operational(self.global_settings.settings.plugins.latheengraver.is_operational());
             //console.log(self.settings);
             self.pump_profile = "None";
+            self.curve_profile = "None";
             self.fetchSavedGeos();
 
             self.fetchProfileFiles();
+            self.fetchCurveFiles();
             self.fetchRosetteFiles();
 
             self.a_inc = self.settings.a_inc();
@@ -274,6 +297,7 @@ $(function() {
             self.r_stage = self.settings.r_stage();
             self.r_phase = self.settings.r_phase();
             self.r_phase_v = self.settings.r_phase_v();
+            //self.mm_rev = self.settings.mm_rev();
 
             self.exp = self.settings.exp();
             //console.log(self.exp_feature)
@@ -342,6 +366,26 @@ $(function() {
 
             self.pump_profile = filePath;
             console.log(self.pump_profile);
+            
+        });
+
+        $("#curve_select").on("change", function () {
+            self.curvilinear(false);
+            var filePath = $("#curve_select option:selected").attr("path");
+            var val = $("#curve_select option:selected").attr("value");
+            if (!filePath) {
+                val = "none";
+            }
+            if (val === "none") {
+                filePath = "None";
+            }
+
+            self.curve_profile = filePath;
+            console.log(self.curve_profile);
+            if (filePath != "None") {
+                self.load_curve(filePath);
+                self.curvilinear(true);
+            }
             
         });
 
@@ -528,7 +572,7 @@ $(function() {
                     max: data.maxrad,
                     min: data.minrad,
                 };
-                //this.createPolarPlot(data.type, rosette_info);
+                
                 Plotly.newPlot('rockarea', data.graph.data, data.graph.layout,{displayModeBar: false});
                 if (self.special) {
                     self.special_warning("on","rock");
@@ -540,6 +584,12 @@ $(function() {
                 console.log(data.graph);
                 var json_data = JSON.stringify(data.graph);
                 Plotly.newPlot('rockarea', data.graph.data, data.graph.layout,{displayModeBar: false});   
+            }
+
+            if (plugin == 'roseengine' && data.type == 'curve') {
+                //console.log(data.graph);
+                var json_data = JSON.stringify(data.graph);
+                Plotly.newPlot('pumparea', data.graph.data, data.graph.layout,{displayModeBar: false});   
             }
 
             if (plugin == 'roseengine' && data.type == 'pump') {
@@ -570,7 +620,7 @@ $(function() {
             }
         };
 
-        self.send_error_messasge = function(message) {
+        self.send_error_message = function(message) {
             var data = {
                 message: message
             };
@@ -582,6 +632,25 @@ $(function() {
                 .fail(function() {
                     console.error("Error message not sent");
                 });
+        };
+
+        self.load_curve = function (filePath) {
+            var data = {
+                path: filePath,
+            }
+
+            OctoPrint.simpleApiCommand("roseengine", "curve", data)
+                .done(function(response) {
+                    console.log("Curvilinear sent");
+                })
+                .fail(function() {
+                    console.error("Curvilinear failed");
+                });
+        };
+
+        self.toggle_clutch = function (){
+            self.clutch(!self.clutch());
+            self.update_rpm();
         };
 
         self.parametric_rosette = function(type) {
@@ -788,6 +857,7 @@ $(function() {
                 });
 
             self.fetchProfileFiles();
+            self.fetchCurveFiles();
             self.fetchRosetteFiles();
 
         };
@@ -821,6 +891,7 @@ $(function() {
                 pump_profile: self.pump_profile,
                 gcode_geo: self.gcode_geo(),
                 wm: self.wm,
+                curve_dir: self.curve_dir(),
                
 
             };
@@ -874,7 +945,8 @@ $(function() {
         self.update_rpm = function()  {
             var data = {
                 rpm: self.rpm(),
-                moveb: self.moveb()
+                moveb: self.moveb(),
+                clutch: self.clutch(),
             };
 
             OctoPrint.simpleApiCommand("roseengine", "update_rpm", data)

@@ -85,6 +85,21 @@
                         <select id="scan_pump_select" data-bind="">
                     </select>
                 </div>
+                <div data-bind="visible: exp">
+                    <details>
+                    <summary>Curvilinear</summary>
+                    <label>Curvilinear SVG:</label>
+                        <select id="curve_select" data-bind="">
+                    </select>
+                    
+                    <label>Direction:</label>
+                    <select id="wave_type" data-bind="value: curve_dir">
+                        <option value="1">Left-to-Right</option>
+                        <option value="-1">Right-to-Left</option>
+                    </select>
+                    
+                    </details>
+                </div>
                 <div style="margin-top: auto; display: flex; justify-content: center;">
                     <button id="clear_rock" class="btn" data-bind="click: function() {clear_rosette('pump')}"> Clear</button>
                 </div>
@@ -122,7 +137,7 @@
                     </div>
                     <div>
                         <label style="display: block;" for="moveb" title="Any linear injected movements are modified based on current B angle, as referenced by B-ref."> Inject along B-angle:
-                        <input style="vertical-align:middle; position: relative; bottom: 1px;" id="moveb" type="checkbox" data-bind="checked: moveb">
+                        <input style="vertical-align:middle; position: relative; bottom: 1px;" id="moveb" type="checkbox" data-bind="checked: moveb, valueUpdate: 'input'">
                         </label>
                     </div>
                     <div>
@@ -191,6 +206,7 @@
                 <button id="start_job_button" class="btn btn-primary" data-bind="enable: is_operational() && available(), click: startjob">Start</button>
                 <button id="stop_job_button" class="btn btn-primary" data-bind="enable: is_operational() && available(),click: stopjob">Stop</button>
                 <button id="gotostart_button" class="btn btn-primary" data-bind="enable: is_operational() && available(),click: gotostart">Reset</button>
+                <button id="clutch_button" class="btn btn-primary" data-bind="visible: curvilinear(), enable: is_operational() && available(),click: toggle_clutch">Clutch</button>
             </div>
             <!-- Recording controls -->
             

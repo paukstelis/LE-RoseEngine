@@ -30,6 +30,10 @@
             <i class="icon icon-info-sign" title="Adjust speed of moves that include injected commands. Divides nominal feed by this value. 0 ignores." data-toggle="tooltip"></i>
         </label>
         <label>
+            <input type="checkbox" data-bind="checked: settings.plugins.roseengine.show_injects">  Show cumulative injected commands
+            <i class="icon icon-info-sign" title="Updates how far X and Z have been moved from injected commands. Based on the start point of each run." data-toggle="tooltip"></i>
+        </label>
+        <label>
             <input type="checkbox" data-bind="checked: settings.plugins.roseengine.auto_reset">  Auto-reset on stop
             <i class="icon icon-info-sign" title="Return to start position each time a run is stopped." data-toggle="tooltip"></i>
         </label>
@@ -50,6 +54,18 @@
         <label title="When using an X-scan with pumping, this option will use both the difference distance and the rotational difference when performing Z compensation">
         <input type="checkbox" data-bind="checked: settings.plugins.roseengine.use_zdiff">   Use positional Z-difference with X-scans
         </label>
+
+        <h3>Curvilinear Options</h3>
+
+            <label>
+            <input type="number" step="any" min="0" max="200" class="input-mini" data-bind="numeric, value: settings.plugins.roseengine.mm_rev"> Millimeter per revolution
+            <i class="icon icon-info-sign" title="The X distance traversed per revolution." data-toggle="tooltip"></i>
+            </label>
+            <label>
+            <input type="number" step="any" min="0" max="200" class="input-mini" data-bind="numeric, value: settings.plugins.roseengine.curve_stepdown"> Step down per pass (mm)
+            <i class="icon icon-info-sign" title="The Z distance to step down per traversal of the pattern" data-toggle="tooltip"></i>
+            </label>
+
 
         <h3>Laser options</h3>
         <label>
