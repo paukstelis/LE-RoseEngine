@@ -94,7 +94,7 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
         self.a_spline = None
         self.pump_profile = None
         #Curvilinear parameters
-        self.curve = {"active" : False, "diff" : []}
+        self.curve = {"active" : False, "diffs" : []}
         self.curve_mm_rev = 2.0
         self.curve_recip = True
         self.curve_stepdown = 0.0
@@ -889,7 +889,7 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
                     xchunk = self.working_x[i:i+self.chunk]
                     modchunk = self.working_mod[i:i+self.chunk]
                     curvechunk = []
-                    if self.curve["active"]:
+                    if self.curve["active"] and len(self.curve["diffs"]):
                         diffs = self.curve["diffs"]
                         dirn = self.curve["dir"]
                         while len(curvechunk) < len(achunk):
@@ -1789,7 +1789,7 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
             if data["type"] == "pump":
                 self.pump_main = []
                 self.pump_work = []
-                self.curve = {"active": False, "diff": []}
+                self.curve = {"active": False, "diffs": []}
             return
 
         if command == "update_rpm":
@@ -1798,7 +1798,7 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
             #curvilinear clutch
             if self.curve["active"] and bool(data["clutch"]) == False:
                 self.curve["active"] = False
-            if not self.curve["active"] and bool(data["clutch"]) == True:
+            if not self.curve["active"] and len(self.curve["diffs"]) and bool(data["clutch"]) == True:
                 self.curve["active"] = True
             with self.rpm_lock:
                 self.updated_rpm = float(data["rpm"])
