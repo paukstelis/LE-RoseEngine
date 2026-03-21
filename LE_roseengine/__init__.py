@@ -428,7 +428,7 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
 
         axis_updates = [(axis, delta)]
         if self.moveB and axis in ("X", "Z"):
-            b_angle = math.radians(self.bref - self.current_b) *-1
+            b_angle = math.radians(self.current_b - self.bref) *-1
             self._logger.debug(f"Calculated b-angle: {np.angle(b_angle)}")
             x_delta = delta * math.cos(b_angle)
             z_delta = delta * math.sin(b_angle)
@@ -899,16 +899,21 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
                             curvechunk.extend(take)
                             self.curve["idx"] = idx + len(take)
                             if self.curve["idx"] >= len(diffs):
-                                self.curve["dir"] = dirn*-1
-                                self.curve["idx"] = 0
-                                self.curve["diffs"] = np.flip(diffs * -1)
-                                #these are just for record keeping
-                                self.curve["x"] = np.flip(self.curve["x"])
-                                self.curve["z"] = np.flip(self.curve["z"])
-                                if self.curve_stepdown and not self.inject:
-                                    self.inject = ("Z", -float(self.curve_stepdown))
-                                    self._logger.debug("Pass done, injecting step down")
-                                continue
+                                if self.curve_recip:
+                                    self.curve["dir"] = dirn*-1
+                                    self.curve["idx"] = 0
+                                    self.curve["diffs"] = np.flip(diffs * -1)
+                                    #these are just for record keeping
+                                    self.curve["x"] = np.flip(self.curve["x"])
+                                    self.curve["z"] = np.flip(self.curve["z"])
+                                    if self.curve_stepdown and not self.inject:
+                                        self.inject = ("Z", -float(self.curve_stepdown))
+                                        self._logger.debug("Pass done, injecting step down")
+                                    continue
+                                else:
+                                    self.curve["active"] = False
+                                    break
+
                         curvechunk = curvechunk[:len(achunk)]
                     else:
                         curvechunk = []
@@ -1001,8 +1006,6 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
                                 tms = round(time.time() * 1000)
                                 if not self.running:
                                     break
-
-                        #self._logger.info(f"buffer is now at {self.buffer}")
                         self._printer.commands(cmdlist)
                         self.buffer_received = False
                     else:
@@ -1103,8 +1106,6 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
         self.geo_angles = angle_diffs
         self.geo_depth = np.zeros_like(self.geo_radii)
 
-        
-        
         if self.radial_depth:
             max_r = np.max(new_radii)
             depth_vals = np.zeros_like(self.geo_radii, dtype=float)
@@ -1692,7 +1693,8 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
             self.radial_depth = float(data["radial_depth"])
             self.pump_profile = data["pump_profile"]
             self.gcode_geo = bool(data["gcode_geo"])
-            self.curve_dir = int(data["curve_dir"]) 
+            self.curve_dir = int(data["curve_dir"])
+            self.curve_recip = bool(data["recip"]) 
             self._logger.info("ready to start job")
             if float(data["e_ratio"]) > 1.0 and not self.rock_main["type"] == "geometric":
                 rad = float(data["e_rad"])
