@@ -611,6 +611,7 @@ $(function() {
             if (plugin == 'roseengine' && data.func == 'refresh') {
                 self.fetchProfileFiles();
                 self.fetchRosetteFiles();
+                self.fetchSavedGeos();
                 //console.log("got files");
             }
 

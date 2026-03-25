@@ -92,17 +92,17 @@
         <label>
             <input type="number" step="any" class="input-mini" data-bind="numeric, value: settings.plugins.roseengine.min_correct">
             Minimum power correction scale factor
-            <i class="icon icon-info-sign" title="when power scaling is used, this is the minimum scale factor from the set power." data-toggle="tooltip"></i>
+            <i class="icon icon-info-sign" title="When power scaling is used, this is the minimum scale factor from the set power." data-toggle="tooltip"></i>
         </label>
         <br>
         <h3>Geometric Chuck options</h3>
         <label>
             <input type="number" step="1" min="2" max="10" class="input-mini" data-bind="numeric, value: settings.plugins.roseengine.geo_stages"> Geometric chuck stages
-            <i class="icon icon-info-sign" title="" data-toggle="tooltip"></i>
+            <i class="icon icon-info-sign" title="The number of geometric chuck stages available." data-toggle="tooltip"></i>
         </label>
         <label>
             <input type="number" step="1" min="50" max="20000" class="input-mini" data-bind="numeric, value: settings.plugins.roseengine.geo_points"> Default sampling points
-            <i class="icon icon-info-sign" title="" data-toggle="tooltip"></i>
+            <i class="icon icon-info-sign" title="The number of total points used in pattern calculation. Very large values will lead to slow movement speeds." data-toggle="tooltip"></i>
         </label>
         <label>
             <input type="number" step="1" min="10" max="10000" class="input-mini" data-bind="numeric, value: settings.plugins.roseengine.geo_thresh"> Interpolation point threshold
@@ -110,27 +110,27 @@
         </label>
         <label>
             <input type="number" step="1" min="50" max="20000" class="input-mini" data-bind="numeric, value: settings.plugins.roseengine.geo_interp"> Interpolation resampling points
-            <i class="icon icon-info-sign" title="The number of sampling points  during re-interpolation." data-toggle="tooltip"></i>
+            <i class="icon icon-info-sign" title="The number of sampling points during re-interpolation." data-toggle="tooltip"></i>
         </label>
         <label>
             <input type="number" step="1" class="input-mini" data-bind="numeric, value: settings.plugins.roseengine.r_radius"> Random radius max value
-            <i class="icon icon-info-sign" title="" data-toggle="tooltip"></i>
+            <i class="icon icon-info-sign" title="The maximum radius value when randomizing" data-toggle="tooltip"></i>
         </label>
 
         <label>
             <input type="number" step="1" class="input-mini" data-bind="numeric, value: settings.plugins.roseengine.r_stage"> Random p/q max value
-            <i class="icon icon-info-sign" title="" data-toggle="tooltip"></i>
+            <i class="icon icon-info-sign" title="The maximum gear ratio values when randomzing" data-toggle="tooltip"></i>
         </label>
 
 
         <label>
             <input type="checkbox" data-bind="checked: settings.plugins.roseengine.r_phase">  Randomize phase?
-            <i class="icon icon-info-sign" title="" data-toggle="tooltip"></i>
+            <i class="icon icon-info-sign" title="Phase values will be randomized as well." data-toggle="tooltip"></i>
         </label>
 
         <label>
             <input type="number" step="1" class="input-mini" data-bind="numeric, value: settings.plugins.roseengine.r_phase_v"> Random phase max value
-            <i class="icon icon-info-sign" title="" data-toggle="tooltip"></i>
+            <i class="icon icon-info-sign" title="If randomized, the maximum phase value" data-toggle="tooltip"></i>
         </label>
         <div class="dev">
         <h4>Geometric Chuck Gcode</h4>

@@ -1670,7 +1670,8 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
                     json.dump(data, f, indent=2)
 
                 self._logger.info(f"Saved geometric chuck entry to {file_path}")
-                #self._plugin_manager.send_plugin_message("roseengine", {"save_geo": "ok", "path": file_path})
+                self._plugin_manager.send_plugin_message("roseengine", dict(func="refresh"))
+                #self._plugin_manager.send_plugin_message('latheengraver',  dict(type='filerefresh'))
             except Exception as e:
                 self._logger.error(f"Failed to save geometric chuck: {e}", exc_info=True)
                 #self._plugin_manager.send_plugin_message("roseengine", {"save_geo": "error", "error": str(e)})
