@@ -57,6 +57,7 @@ $(function() {
         self.curvilinear = ko.observable(false);
         self.clutch = ko.observable(true);
         self.curve_dir = ko.observable(1);
+        self.recip = ko.observable(true);
 
         //Recording
         self.recording  = ko.observable(false);
@@ -610,6 +611,7 @@ $(function() {
             if (plugin == 'roseengine' && data.func == 'refresh') {
                 self.fetchProfileFiles();
                 self.fetchRosetteFiles();
+                self.fetchSavedGeos();
                 //console.log("got files");
             }
 
@@ -892,6 +894,7 @@ $(function() {
                 gcode_geo: self.gcode_geo(),
                 wm: self.wm,
                 curve_dir: self.curve_dir(),
+                recip: self.recip(),
                
 
             };
