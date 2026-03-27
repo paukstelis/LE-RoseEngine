@@ -1350,7 +1350,7 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
         self._logger.debug("plotting curve as pump")
     
     def geo_gcode(self, radii, angles):
-        self.geo_gcode = False
+        self.gcode_geo = False
         gcode = []
         #to cartesian
         x = radii * np.cos(np.radians(angles))
