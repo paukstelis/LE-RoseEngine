@@ -38,8 +38,8 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
         self.inject = None
         self.recording = False
         #contains all the raw values that can be transformed into working values
-        self.rock_main = {}
-        self.pump_main = {}
+        self.rock_main = {"type": None}
+        self.pump_main = {"type": None}
         self.rock_work = []
         self.pump_work = []
         self.working_x = []
@@ -648,6 +648,7 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
         self._logger.debug(f"First/last radii/angle: {radii[0]} {angles[0]} {radii[-1]} {angles[-1]}")
 
         rosette = {
+            "type": type,
             "radii": radii,
             "angles": angles,
             "max_radius": max_radius,
@@ -818,7 +819,7 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
         #phase offsets applied here to the working array
         phasecmds = []
         pump_rad_start = 0
-        if self.pump_offset and self.pump_main:
+        if self.pump_offset and self.pump_main["type"]:
             #base the roll on self.a_inc
             roll = int(self.pump_offset/self.a_inc)
             #determine absolute value at this position from main
@@ -1142,7 +1143,7 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
         modifier = []
         mod_array = np.array(modifier)
         
-        if self.pump_main:
+        if self.pump_main["type"]:
             self.pump_work = self.create_working_path(self.pump_main, self.p_amp)
             #Other modifictions
             if self.pump_invert:
@@ -1152,7 +1153,7 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
         else:
             working_x = np.zeros_like(self.rock_main["radii"])
 
-        if self.rock_main:
+        if self.rock_main["type"]:
             #this is now a dict with radii and angle keys
             self.rock_work = self.create_working_path(self.rock_main, self.r_amp)
             working_z = self.rock_work["radii"]
@@ -1192,7 +1193,7 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
         self.working_angles = working_angles
         self.working_mod = mod_array
 
-        if self.ecc_offset and self.pump_main and self.rock_main:
+        if self.ecc_offset and self.pump_main["type"] and self.rock_main["type"]:
             self.working_x = np.zeros_like(working_z)
             msg = dict(
                         title="Warning!",
@@ -1411,14 +1412,14 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
 
         extras = []
         extras.append("( Gcode created by LatheEngraver RoseEngine plugin )")
-        if self.rock_main:
+        if self.rock_main["type"]:
             if self.rock_main["type"] != "parametric":
                 extras.append(f"( Rock rosette, Max Radius: {self.rock_main['max_radius']:.2f}, Min. Radius: {self.rock_main['min_radius']:.2f} )")
             else:
                 extras.append(f"( Parametric rocking Rosette )")
             if self.rock_main["type"] == "geometric":
                 extras.append(f"( This is a geometric chuck design )")
-        if self.pump_main:
+        if self.pump_main["type"]:
             if self.pump_main["type"] != "parametric":
                 extras.append(f"( Pump rosette, Max Radius: {self.pump_main['max_radius']:.2f}, Min. Radius: {self.pump_main['min_radius']:.2f} )")
             else:
@@ -1678,6 +1679,10 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
             return
            
         if command == "start_job":
+            if self.rock_main["type"] is None and self.pump_main["type"] is None:
+                msg = dict(title="Load Pattern", text="You must have a loaded pattern before starting.", type="error")
+                self.send_le_error(msg)
+                return
             self.use_scan = False
             self.write_mode = bool(data["wm"])
             self.rpm = float(data["rpm"])
@@ -1787,10 +1792,10 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
                 self.send_le_error(msg)
                 return
             if data["type"] == "rock":
-                self.rock_main = []
+                self.rock_main = {"type":None}
                 self.rock_work = []
             if data["type"] == "pump":
-                self.pump_main = []
+                self.pump_main = {"type":None}
                 self.pump_work = []
                 self.curve = {"active": False, "diffs": []}
             return
