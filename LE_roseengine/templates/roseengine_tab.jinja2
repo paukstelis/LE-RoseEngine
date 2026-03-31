@@ -241,7 +241,12 @@
 
             <div>
             <!-- ko foreach: distances -->
-                <button id="ctrl-distance-$data" type="button" class="btn dist" style="border: 1px solid; margin: 5px 0px 0px 0px" data-bind="attr: { id: 'ctrl-distance-' + $index() }, click: function() { $parent.distClicked($data) }, text: $data"></button>
+            <button class="btn btn-default btn-sm"
+                   data-bind="click: function() { $root.distClicked($data); },
+                   css: { active: $root.dist() === $data },
+                   event: { contextmenu: function(data, event) { return $root.distRightClicked($data, event); } },
+                   text: $data">
+                </button>
             <!-- /ko -->
             </div>
 

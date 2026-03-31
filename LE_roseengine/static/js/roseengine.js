@@ -22,7 +22,7 @@ $(function() {
         self.p_amp = ko.observable(1);
         self.forward = ko.observable(true);
         self.dist = ko.observable(1.0);
-        self.distances = ko.observableArray([.1, 1, 5, 10, 30, 60, 90]);
+        self.distances = ko.observableArray([.1, .2, .5, 1, 5, 10, 20, 30, 60, 90]);
         self.a_inc = ko.observable(0.5);
         self.bf_threshold = ko.observable(80);
         self.ms_threshold = ko.observable(10);
@@ -467,6 +467,27 @@ $(function() {
         self.distClicked = function(distance) {
             console.log(distance);
             self.dist(parseFloat(distance));
+        };
+        
+        self.distRightClicked = function(distance, event) {
+            event.preventDefault();
+            event.stopPropagation();
+            var current = distance;
+            var input = prompt("Enter new distance value:", current);
+            if (input === null) return;
+            var val = parseFloat(input);
+            if (isNaN(val) || val <= 0) {
+                alert("Please enter a valid positive number.");
+                return;
+            }
+            var arr = self.distances();
+            var idx = arr.indexOf(current);
+            if (idx !== -1) {
+                arr[idx] = val;
+                self.distances(arr.slice());
+            }
+            self.dist(val);
+            return false;
         };
 
         self.createPolarPlot  = function(type,rosette_info) {
