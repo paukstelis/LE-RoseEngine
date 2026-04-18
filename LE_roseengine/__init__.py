@@ -481,9 +481,33 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
 
     def resample_path_to_polar(self, path, center=None, radial_offset=0.0):
         if not center:
-            xmin, xmax, ymin, ymax = path.bbox()
-            cx = (xmin + xmax) / 2
-            cy = (ymin + ymax) / 2
+            N_CENTROID = 2000
+            t_vals = np.linspace(0.0, 1.0, N_CENTROID, endpoint=False)
+            pts = np.array([[path.point(t).real, path.point(t).imag] for t in t_vals])
+            x_pts = pts[:, 0]
+            y_pts = pts[:, 1]
+
+            bb_cx = (x_pts.min() + x_pts.max()) / 2.0
+            bb_cy = (y_pts.min() + y_pts.max()) / 2.0
+            angles_sort = np.arctan2(y_pts - bb_cy, x_pts - bb_cx)
+            sort_idx = np.argsort(angles_sort)
+            x_pts = x_pts[sort_idx]
+            y_pts = y_pts[sort_idx]
+
+            x_next = np.roll(x_pts, -1)
+            y_next = np.roll(y_pts, -1)
+            cross = x_pts * y_next - x_next * y_pts
+            A = 0.5 * np.sum(cross)
+
+            if abs(A) < 1e-10:
+                #stick with bounding box
+                cx = bb_cx
+                cy = bb_cy
+                self._logger.debug(f"Below threshold, cx, cy: {cx}, {cy}")
+            else:
+                cx = np.sum((x_pts + x_next) * cross) / (6.0 * A)
+                cy = np.sum((y_pts + y_next) * cross) / (6.0 * A)
+                self._logger.debug(f"Calculated centroid cx, cy: {cx}, {cy}")
         else:
             cx = center[0]
             cy = center[1]
