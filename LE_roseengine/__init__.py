@@ -1534,6 +1534,7 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
             laser=[],
             save_geo=[],
             curve=[],
+            rename_geo=["index","name"],
         )
     
     def on_api_command(self, command, data):
@@ -1648,6 +1649,26 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
                 returndata = dict(type="curve", graph=json_figure)
                 self._plugin_manager.send_plugin_message('roseengine', returndata)
 
+        if command == "rename_geo":
+            import flask
+            index = data.get("index")
+            name = data.get("name")
+            folder = self._settings.getBaseFolder("uploads")
+            json_path = os.path.join(folder, "rosette", "saved_geos.json")
+            try:
+                with open(json_path, "r") as f:
+                    geos = json.load(f)
+                if not isinstance(geos, list) or index >= len(geos):
+                    return flask.make_response("Invalid index", 400)
+                geos[index]["timestamp"] = name
+                with open(json_path, "w") as f:
+                    json.dump(geos, f, indent=2)
+                self._logger.info(f"Renamed geo entry {index} to '{name}'")
+            except Exception as e:
+                self._logger.error(f"Failed to rename geo entry: {e}", exc_info=True)
+                return flask.make_response("Error", 500)
+            return flask.make_response("OK", 200)
+        
         if command == "save_geo":
             """
             Append current geometric chuck definition to uploads/rosette/saved_geos.json

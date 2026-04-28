@@ -179,7 +179,7 @@ $(function() {
                                 data.forEach(function(entry, i) {
                                     var label = entry.timestamp ? entry.timestamp : ("entry " + i);
                                     //console.log(label);
-                                    if (entry.type) label = label + " (" + entry.type + ")";
+                                    if (entry.type) label = label;
                                     sel.append($("<option>").text(label).attr("value", i));
                                 });
                             }
@@ -354,6 +354,26 @@ $(function() {
                     self.loadSavedGeo(val);
                 }
             });
+
+        $("#saved_geo_select").on("contextmenu", function(e) {
+            e.preventDefault();
+            var val = $(this).val();
+            if (val === "" || val === null) return;
+            var entry = self.saved_geos()[parseInt(val, 10)];
+            if (!entry) return;
+            var currentName = entry.timestamp || ("entry " + val);
+            var newName = prompt("Enter new name for this entry:", currentName);
+            if (newName === null || newName.trim() === "") return;
+            OctoPrint.simpleApiCommand("roseengine", "rename_geo", { index: parseInt(val, 10), name: newName.trim() })
+                .done(function() {
+                    console.log("Geo entry renamed");
+                    self.fetchSavedGeos();
+                })
+                .fail(function() {
+                    console.error("Failed to rename geo entry");
+                });
+            self.fetchSavedGeos();
+        });
 
         $("#scan_pump_select").on("change", function () {
             var filePath = $("#scan_pump_select option:selected").attr("path");
