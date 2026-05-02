@@ -95,7 +95,7 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
         self.pump_profile = None
         #Curvilinear parameters
         self.curve = {"active" : False, "diffs" : []}
-        self.curve_mm_rev = 2.0
+        self.curve_mm_rev = 0.0
         self.curve_recip = True
         self.curve_stepdown = 0.0
         self.curve_dir = "l2r"
@@ -221,7 +221,7 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
             axis_rules=[],
             inch=False,
             i_feed=0,
-            mm_rev=2.0,
+            mm_rev=0.2,
             curve_stepdown=0.0,
             show_injects=True
             )
@@ -984,7 +984,7 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
                             arc = track["z"] * math.radians(self.a_inc)
                             chunk_distance = chunk_distance + math.sqrt(arc**2 + x**2 + z**2)
 
-                        cmdlist.append(f"G93 G91 G1 X{x:0.4f} A{a:0.3f} Z{z:0.4f} F{feed:0.1f}")
+                        cmdlist.append(f"G93 G91 G1 X{x:0.6f} A{a:0.3f} Z{z:0.6f} F{feed:0.1f}")
                     
                     if self.laser and chunk_distance and self.power_correct:
                         #figure out scaling of power here
@@ -1188,6 +1188,7 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
 
         #handle curvilinear
         if self.curve["active"] and len(self.curve["x"]):
+            self.curve["xstep"] = self.curve_mm_rev/(360/self.a_inc)
             self.curve["idx"] = 0
             self.curve["diffs"] = np.diff(self.curve["z"])
             self._logger.debug(self.curve["diffs"])
