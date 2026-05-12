@@ -300,7 +300,8 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
         angles = np.deg2rad(angles)
         angles = np.unwrap(angles)
         angles = np.degrees(angles)
-        radii = np.array(radii) * amp
+        #remove radii modification here and move to rosette load
+        #radii = np.array(radii) * amp
         # Calculate differences
         radius_diffs = np.diff(radii)
         angle_diffs = np.diff(angles)
@@ -507,7 +508,7 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
             else:
                 cx = np.sum((x_pts + x_next) * cross) / (6.0 * A)
                 cy = np.sum((y_pts + y_next) * cross) / (6.0 * A)
-                self._logger.debug(f"Calculated centroid cx, cy: {cx}, {cy}")
+                self._logger.debug(f"Calculated centroid cx, cy: {cx}, {cy}, Bounding box center, {bb_cx}, {bb_cy}")
         else:
             cx = center[0]
             cy = center[1]
@@ -878,7 +879,7 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
             
             if not self.forward:
                 self.working_angles = self.working_angles*-1
-
+            count = 0
             while self.running:
 
                 self.buffer = 0
@@ -887,6 +888,9 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
                 time_unit = self.a_inc/degrees_sec * 1000 #ms
                 tms = round(time.time() * 1000)
                 if loop_start:
+                    #test for rock only
+                    #areset = count*360 + self.start_coords["a"]
+                    #cmdlist.append(f"G94 G90 G0 Z{self.start_coords['z']} A{areset}")
                     self._logger.debug(f"loop time ms: {tms - loop_start}")
                     self._logger.debug(f"Z-positiong at loop: {track['z']}")
                     if self.curve["active"]:
@@ -984,7 +988,7 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
                             arc = track["z"] * math.radians(self.a_inc)
                             chunk_distance = chunk_distance + math.sqrt(arc**2 + x**2 + z**2)
 
-                        cmdlist.append(f"G93 G91 G1 X{x:0.6f} A{a:0.3f} Z{z:0.6f} F{feed:0.1f}")
+                        cmdlist.append(f"G93 G91 G1 X{x:0.6f} A{a:0.6f} Z{z:0.6f} F{feed:0.1f}")
                     
                     if self.laser and chunk_distance and self.power_correct:
                         #figure out scaling of power here
@@ -1052,7 +1056,7 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
                 if self.write_mode:
                     self.running = False
                     self.rosette_gcode(cmd_buffer)
-
+                count += 1
         except Exception as e:
             self._logger.error(f"Exception in job thread: {e}", exc_info=True)
         self._logger.info("Thread ended")
@@ -1508,7 +1512,8 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
         path_on_disk = "{}/{}".format(self._settings.getBaseFolder("watched"), filename)
         if self.relative_return:
             #need this inserted after G92 A0
-            self.recorded.insert(1, "STARTCAP")
+            self.recorded.insert(0, "G4 P1")
+            self.recorded.insert(1,"STARTCAP")
         with open(path_on_disk,"w") as newfile:
             #write in comment stuff here
             for line in self.recorded:
@@ -1549,7 +1554,11 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
             rosette = self.load_rosette(filePath,type)
             s = rosette["special"]
             if type == "rock":
+                self.r_amp = float(data["r_amp"])
                 self.rock_main = rosette
+                self.rock_main["radii"] = np.array(self.rock_main["radii"]) * self.r_amp
+                self.rock_main["max_radius"] = np.max(self.rock_main["radii"])
+                self.rock_main["min_radius"] = np.min(self.rock_main["radii"])
                 r = list(self.rock_main["radii"])
                 r.append(r[0])
                 a = list(self.rock_main["angles"])
@@ -1559,7 +1568,11 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
                 data = dict(type="rock", special=s, graph=json_figure)
                 
             elif type == "pump":
+                self.p_amp = float(data["p_amp"])
                 self.pump_main = rosette
+                self.pump_main["radii"] = np.array(self.pump_main["radii"]) * self.p_amp
+                self.pump_main["max_radius"] = np.max(self.pump_main["radii"])
+                self.pump_main["min_radius"] = np.min(self.pump_main["radii"])
                 r = list(self.pump_main["radii"])
                 r.append(r[0])
                 a = list(self.pump_main["angles"])
