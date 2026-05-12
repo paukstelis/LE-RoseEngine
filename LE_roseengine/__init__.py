@@ -665,8 +665,8 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
         elif len(angles) > expected_points and ext == ".svg":
             special_case = True
 
-        if self.ecc_offset and type == "rock":
-            radii, angles = self.resample_offset(radii, angles, self.ecc_offset)
+        #if self.ecc_offset and type == "rock":
+        #    radii, angles = self.resample_offset(radii, angles, self.ecc_offset)
 
         max_radius = np.max(radii)
         min_radius = np.min(radii)
@@ -1557,8 +1557,15 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
                 self.r_amp = float(data["r_amp"])
                 self.rock_main = rosette
                 self.rock_main["radii"] = np.array(self.rock_main["radii"]) * self.r_amp
+
+                if self.ecc_offset:
+                    self.rock_main["radii"], self.rock_main["angles"] = self.resample_offset(
+                        self.rock_main["radii"], self.rock_main["angles"], self.ecc_offset
+                    )
+
                 self.rock_main["max_radius"] = np.max(self.rock_main["radii"])
                 self.rock_main["min_radius"] = np.min(self.rock_main["radii"])
+
                 r = list(self.rock_main["radii"])
                 r.append(r[0])
                 a = list(self.rock_main["angles"])
