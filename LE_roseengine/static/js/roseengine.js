@@ -704,6 +704,9 @@ $(function() {
                 peak: self.peak(),
                 phase: self.pshift(),
                 wave_type: self.wave_type(),
+                r_amp: self.r_amp(),
+                p_amp: self.p_amp(),
+                ecc_offset: self.ecc_offset(),
             }
             
             OctoPrint.simpleApiCommand("roseengine", "parametric", data)
