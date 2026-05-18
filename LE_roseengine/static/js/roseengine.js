@@ -18,8 +18,8 @@ $(function() {
         self.radii_pump = [];
         self.angles_pump = [];
         self.rpm = ko.observable(2);
-        self.r_amp = ko.observable(1);
-        self.p_amp = ko.observable(1);
+        self.r_amp = ko.observable(1.0);
+        self.p_amp = ko.observable(1.0);
         self.forward = ko.observable(true);
         self.dist = ko.observable(1.0);
         self.distances = ko.observableArray([.1, .2, .5, 1, 5, 10, 20, 30, 60, 90]);
@@ -38,6 +38,7 @@ $(function() {
         self.peak = ko.observable(1);
         self.pshift = ko.observable(0.0);
         self.wave_type = ko.observable(null);
+        self.default_radius = ko.observable(20.0);
         self.e_rad = ko.observable(10.0);
         self.e_ratio = ko.observable(1.0);
         self.b_adjust = ko.observable(0);
@@ -410,7 +411,7 @@ $(function() {
             
         });
 
-        $("#rock_file_select").on("change", function () {
+        $("#rock_file_select").on("click", function () {
             var filePath = $("#rock_file_select option:selected").attr("path");
             self.name = $("#rock_file_select option:selected").attr("value");
             if (!filePath) return;
@@ -419,7 +420,7 @@ $(function() {
             
         });
 
-        $("#pump_file_select").on("change", function () {
+        $("#pump_file_select").on("click", function () {
             var filePath = $("#pump_file_select option:selected").attr("path");
             self.name = $("#pump_file_select option:selected").attr("value");
             if (!filePath) return;
@@ -704,6 +705,10 @@ $(function() {
                 peak: self.peak(),
                 phase: self.pshift(),
                 wave_type: self.wave_type(),
+                r_amp: self.r_amp(),
+                p_amp: self.p_amp(),
+                ecc_offset: self.ecc_offset(),
+                default_radius: self.default_radius(),
             }
             
             OctoPrint.simpleApiCommand("roseengine", "parametric", data)
@@ -871,6 +876,8 @@ $(function() {
                 filepath: filePath,
                 type: type,
                 ecc_offset: self.ecc_offset(),
+                r_amp: self.r_amp(),
+                p_amp: self.p_amp(),
             };
 
             OctoPrint.simpleApiCommand("roseengine", "load_rosette", data)

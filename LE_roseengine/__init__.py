@@ -95,7 +95,7 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
         self.pump_profile = None
         #Curvilinear parameters
         self.curve = {"active" : False, "diffs" : []}
-        self.curve_mm_rev = 2.0
+        self.curve_mm_rev = 0.0
         self.curve_recip = True
         self.curve_stepdown = 0.0
         self.curve_dir = "l2r"
@@ -221,7 +221,7 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
             axis_rules=[],
             inch=False,
             i_feed=0,
-            mm_rev=2.0,
+            mm_rev=0.2,
             curve_stepdown=0.0,
             show_injects=True
             )
@@ -300,7 +300,8 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
         angles = np.deg2rad(angles)
         angles = np.unwrap(angles)
         angles = np.degrees(angles)
-        radii = np.array(radii) * amp
+        #remove radii modification here and move to rosette load
+        #radii = np.array(radii) * amp
         # Calculate differences
         radius_diffs = np.diff(radii)
         angle_diffs = np.diff(angles)
@@ -507,7 +508,7 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
             else:
                 cx = np.sum((x_pts + x_next) * cross) / (6.0 * A)
                 cy = np.sum((y_pts + y_next) * cross) / (6.0 * A)
-                self._logger.debug(f"Calculated centroid cx, cy: {cx}, {cy}")
+                self._logger.debug(f"Calculated centroid cx, cy: {cx}, {cy}, Bounding box center, {bb_cx}, {bb_cy}")
         else:
             cx = center[0]
             cy = center[1]
@@ -664,8 +665,8 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
         elif len(angles) > expected_points and ext == ".svg":
             special_case = True
 
-        if self.ecc_offset and type == "rock":
-            radii, angles = self.resample_offset(radii, angles, self.ecc_offset)
+        #if self.ecc_offset and type == "rock":
+        #    radii, angles = self.resample_offset(radii, angles, self.ecc_offset)
 
         max_radius = np.max(radii)
         min_radius = np.min(radii)
@@ -878,7 +879,7 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
             
             if not self.forward:
                 self.working_angles = self.working_angles*-1
-
+            count = 0
             while self.running:
 
                 self.buffer = 0
@@ -887,6 +888,9 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
                 time_unit = self.a_inc/degrees_sec * 1000 #ms
                 tms = round(time.time() * 1000)
                 if loop_start:
+                    #test for rock only
+                    #areset = count*360 + self.start_coords["a"]
+                    #cmdlist.append(f"G94 G90 G0 Z{self.start_coords['z']} A{areset}")
                     self._logger.debug(f"loop time ms: {tms - loop_start}")
                     self._logger.debug(f"Z-positiong at loop: {track['z']}")
                     if self.curve["active"]:
@@ -984,7 +988,7 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
                             arc = track["z"] * math.radians(self.a_inc)
                             chunk_distance = chunk_distance + math.sqrt(arc**2 + x**2 + z**2)
 
-                        cmdlist.append(f"G93 G91 G1 X{x:0.4f} A{a:0.3f} Z{z:0.4f} F{feed:0.1f}")
+                        cmdlist.append(f"G93 G91 G1 X{x:0.6f} A{a:0.6f} Z{z:0.6f} F{feed:0.1f}")
                     
                     if self.laser and chunk_distance and self.power_correct:
                         #figure out scaling of power here
@@ -1052,7 +1056,7 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
                 if self.write_mode:
                     self.running = False
                     self.rosette_gcode(cmd_buffer)
-
+                count += 1
         except Exception as e:
             self._logger.error(f"Exception in job thread: {e}", exc_info=True)
         self._logger.info("Thread ended")
@@ -1188,6 +1192,7 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
 
         #handle curvilinear
         if self.curve["active"] and len(self.curve["x"]):
+            self.curve["xstep"] = self.curve_mm_rev/(360/self.a_inc)
             self.curve["idx"] = 0
             self.curve["diffs"] = np.diff(self.curve["z"])
             self._logger.debug(self.curve["diffs"])
@@ -1196,7 +1201,6 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
                 self.curve["dir"] = -1
             else:
                 self.curve["dir"] = 1
-
 
         if self.ellipse:
             e_vals = []
@@ -1306,9 +1310,11 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
         if self.auto_reset:
             self.reset_cmds = True
 
-    def _plotly_json(self,r,a,maxrad,minrad,lc="black"):
+    def _plotly_json(self,r,a,maxrad,minrad,diffrad=None,lc="black",t_just="left"):
         #Using the plotly Python library instead of JavaScript as it seems to handle
         #polar coordinates much better
+
+        xval = 0.0 if t_just == "left" else 1.0
 
         fig = self.go.Figure()
         fig.add_trace(go.Scatterpolar(
@@ -1317,6 +1323,12 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
             mode='lines',
             line_color=lc,   
         ))
+
+        #conditional text
+        if diffrad:
+            radtext = f"r max={maxrad:0.1f}<br>r min={minrad:0.1f}<br>r diff={diffrad:0.1f}"
+        else:
+            radtext = f"r max={maxrad:0.1f}<br>r min={minrad:0.1f}"
 
         fig.update_layout(
             margin = dict(
@@ -1332,11 +1344,11 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
             ),
             showlegend=False,
             title=dict(
-                text=f"r max={maxrad:0.1f}<br>r min={minrad:0.1f}",
+                text=radtext,
                 font=dict(size=12),
-                xanchor='center',
+                xanchor=t_just,
                 yanchor='top',
-                x=0.5,
+                x=xval,
             )
             
         )
@@ -1507,7 +1519,8 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
         path_on_disk = "{}/{}".format(self._settings.getBaseFolder("watched"), filename)
         if self.relative_return:
             #need this inserted after G92 A0
-            self.recorded.insert(1, "STARTCAP")
+            self.recorded.insert(0, "G4 P1")
+            self.recorded.insert(1,"STARTCAP")
         with open(path_on_disk,"w") as newfile:
             #write in comment stuff here
             for line in self.recorded:
@@ -1548,22 +1561,48 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
             rosette = self.load_rosette(filePath,type)
             s = rosette["special"]
             if type == "rock":
+                self.r_amp = float(data["r_amp"])
                 self.rock_main = rosette
+                self.rock_main["radii"] = np.array(self.rock_main["radii"]) * self.r_amp
+
+                if self.ecc_offset:
+                    self.rock_main["radii"], self.rock_main["angles"] = self.resample_offset(
+                        self.rock_main["radii"], self.rock_main["angles"], self.ecc_offset
+                    )
+
+                self.rock_main["max_radius"] = np.max(self.rock_main["radii"])
+                self.rock_main["min_radius"] = np.min(self.rock_main["radii"])
+
                 r = list(self.rock_main["radii"])
                 r.append(r[0])
                 a = list(self.rock_main["angles"])
                 a.append(a[0])
-                json_figure = self._plotly_json(r,a,self.rock_main["max_radius"],minrad=self.rock_main["min_radius"],lc="blue")
-                #data = dict(type="rock", special=s, radii=r, angles=a, maxrad=self.rock_main["max_radius"], minrad=self.rock_main["min_radius"])
+                json_figure = self._plotly_json(r,
+                                                a,
+                                                self.rock_main["max_radius"],
+                                                self.rock_main["min_radius"],
+                                                diffrad=(self.rock_main["max_radius"] - self.rock_main["min_radius"]),
+                                                t_just="left",
+                                                lc="blue")
                 data = dict(type="rock", special=s, graph=json_figure)
                 
             elif type == "pump":
+                self.p_amp = float(data["p_amp"])
                 self.pump_main = rosette
+                self.pump_main["radii"] = np.array(self.pump_main["radii"]) * self.p_amp
+                self.pump_main["max_radius"] = np.max(self.pump_main["radii"])
+                self.pump_main["min_radius"] = np.min(self.pump_main["radii"])
                 r = list(self.pump_main["radii"])
                 r.append(r[0])
                 a = list(self.pump_main["angles"])
                 a.append(a[0])
-                json_figure = self._plotly_json(r,a,self.pump_main["max_radius"],minrad=self.pump_main["min_radius"],lc="green")
+                json_figure = self._plotly_json(r,
+                                                a,
+                                                self.pump_main["max_radius"],
+                                                self.pump_main["min_radius"],
+                                                diffrad=(self.pump_main["max_radius"] - self.pump_main["min_radius"]),
+                                                t_just="right",
+                                                lc="green")
                 data = dict(type="pump", special=s, graph=json_figure)
                 #data = dict(type="pump", special=s, radii=r, angles=a, maxrad=self.pump_main["max_radius"], minrad=self.pump_main["min_radius"])
                 #self._logger.info(f"Loaded pump rosette: {self.pump_main}")
@@ -1582,30 +1621,39 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
             rose_type = data["type"]
             wave_type = data["wave_type"]
             amp = float(data["amp"])
+            default_rad = float(data["default_radius"])
             peak = data["peak"]
             phase = data["phase"]
+            self.ecc_offset = float(data['ecc_offset'])
             lc = "black"
             #do some stuff
             rosette = self._parametric_sine(data)
-            r = np.array(rosette["radii"])
-            #just add to this so it looks reasonable when graphed
-            r = r+50
-            a = (rosette["angles"])
-            
             self._logger.debug(rosette)
+
             if rose_type == "rock":
                 self.rock_main = rosette
+                self.rock_main["radii"] = np.array(rosette["radii"])+default_rad
+                if self.ecc_offset:
+                    self.rock_main["radii"], self.rock_main["angles"] = self.resample_offset(
+                        self.rock_main["radii"], self.rock_main["angles"], self.ecc_offset
+                    )
                 lc = "blue"
             else:
                 self.pump_main = rosette
+                self.pump_main["radii"] = np.array(rosette["radii"])+default_rad
                 lc = "green"
-            maxrad=int(amp)+50
-            minrad=int(amp)
+
+            r = np.array(rosette["radii"])
+            a = (rosette["angles"])
+            #just add to this so it looks reasonable when graphed
+            maxrad = np.max(rosette["radii"])
+            minrad = np.min(rosette["radii"])
+            diffrad=maxrad-minrad
             r = list(r)
             r.append(r[0])
             a = list(a)
             a.append(a[0])
-            json_figure = self._plotly_json(r,a,maxrad,minrad,lc=lc)
+            json_figure = self._plotly_json(r,a,maxrad,minrad,diffrad=diffrad,lc=lc)
             returndata = dict(type=rose_type, radii=r, angles=a, special=False, graph=json_figure)
             self._plugin_manager.send_plugin_message('roseengine', returndata)
             return
@@ -1635,8 +1683,9 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
             s=True
             maxrad = self.rock_main["max_radius"]
             minrad = self.rock_main["min_radius"]
+            diffrad = maxrad - minrad
 
-            json_figure = self._plotly_json(r,a,maxrad,minrad,lc="black")
+            json_figure = self._plotly_json(r,a,maxrad,minrad,diffrad=diffrad,lc="black")
             returndata = dict(type="geo", special=s, graph=json_figure)
             self._plugin_manager.send_plugin_message('roseengine', returndata) 
 
