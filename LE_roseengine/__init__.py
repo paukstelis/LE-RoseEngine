@@ -1683,8 +1683,9 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
             s=True
             maxrad = self.rock_main["max_radius"]
             minrad = self.rock_main["min_radius"]
+            diffrad = maxrad - minrad
 
-            json_figure = self._plotly_json(r,a,maxrad,minrad,lc="black")
+            json_figure = self._plotly_json(r,a,maxrad,minrad,diffrad=diffrad,lc="black")
             returndata = dict(type="geo", special=s, graph=json_figure)
             self._plugin_manager.send_plugin_message('roseengine', returndata) 
 
