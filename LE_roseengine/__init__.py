@@ -1621,8 +1621,10 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
             rose_type = data["type"]
             wave_type = data["wave_type"]
             amp = float(data["amp"])
+            default_rad = float(data["default_radius"])
             peak = data["peak"]
             phase = data["phase"]
+            self.ecc_offset = float(data['ecc_offset'])
             lc = "black"
             #do some stuff
             rosette = self._parametric_sine(data)
@@ -1630,8 +1632,7 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
 
             if rose_type == "rock":
                 self.rock_main = rosette
-                self.rock_main["radii"] = np.array(self.rock_main["radii"]) * self.r_amp
-
+                self.rock_main["radii"] = np.array(rosette["radii"])+default_rad
                 if self.ecc_offset:
                     self.rock_main["radii"], self.rock_main["angles"] = self.resample_offset(
                         self.rock_main["radii"], self.rock_main["angles"], self.ecc_offset
@@ -1639,14 +1640,14 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
                 lc = "blue"
             else:
                 self.pump_main = rosette
+                self.pump_main["radii"] = np.array(rosette["radii"])+default_rad
                 lc = "green"
 
             r = np.array(rosette["radii"])
             a = (rosette["angles"])
             #just add to this so it looks reasonable when graphed
-            r = r+50
-            maxrad=amp+50
-            minrad=50
+            maxrad = np.max(rosette["radii"])
+            minrad = np.min(rosette["radii"])
             diffrad=maxrad-minrad
             r = list(r)
             r.append(r[0])

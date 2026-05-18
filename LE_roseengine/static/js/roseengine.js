@@ -38,6 +38,7 @@ $(function() {
         self.peak = ko.observable(1);
         self.pshift = ko.observable(0.0);
         self.wave_type = ko.observable(null);
+        self.default_radius = ko.observable(20.0);
         self.e_rad = ko.observable(10.0);
         self.e_ratio = ko.observable(1.0);
         self.b_adjust = ko.observable(0);
@@ -707,6 +708,7 @@ $(function() {
                 r_amp: self.r_amp(),
                 p_amp: self.p_amp(),
                 ecc_offset: self.ecc_offset(),
+                default_radius: self.default_radius(),
             }
             
             OctoPrint.simpleApiCommand("roseengine", "parametric", data)
