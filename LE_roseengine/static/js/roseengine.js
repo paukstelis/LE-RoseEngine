@@ -28,6 +28,8 @@ $(function() {
         self.ms_threshold = ko.observable(10);
         self.chunk = ko.observable(5);
 
+        self.need_reset = ko.observable(false);
+
         self.pump_offset = ko.observable(0.0);
         self.rock_offset = ko.observable(0);
         self.pump_invert = ko.observable(0);
@@ -607,6 +609,11 @@ $(function() {
                 }
             }
 
+            if (plugin == 'roseengine' && data.reset == 'reset') {
+                self.need_reset(false);
+                return;
+            }
+
             if (plugin == 'roseengine' && data.type == 'rock') {
                 self.radii_rock = data.radii;
                 self.angles_rock = data.angles;
@@ -951,6 +958,7 @@ $(function() {
                 .done(function(response) {
                     console.log("Start sent");
                     self.running(true);
+                    self.need_reset(true);
                 })
                 .fail(function() {
                     console.error("Start failed");
@@ -986,6 +994,7 @@ $(function() {
             OctoPrint.simpleApiCommand("roseengine", "goto_start", data)
                 .done(function(response) {
                     console.log("Reset sent");
+                    self.need_reset(false);
                 })
                 .fail(function() {
                     console.error("Reset failed.");

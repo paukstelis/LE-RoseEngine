@@ -1,4 +1,10 @@
 <!--roseengine_tab.jinja2 -->
+<style>
+    .needs-reset {
+        outline: 2px solid #F44336 !important;
+        box-shadow: 0 0 6px 2px rgba(244, 67, 54, 0.6) !important;
+    }
+</style>
 
 <div id="roseengine_plugin_main" class="container-fluid">
 
@@ -212,7 +218,7 @@
             <div style="padding: 10px 0px 0px 0px;">
                 <button id="start_job_button" class="btn btn-primary" data-bind="enable: is_operational() && available(), click: startjob">Start</button>
                 <button id="stop_job_button" class="btn btn-primary" data-bind="enable: is_operational() && available(),click: stopjob">Stop</button>
-                <button id="gotostart_button" class="btn btn-primary" data-bind="enable: is_operational() && available(),click: gotostart">Reset</button>
+                <button id="gotostart_button" class="btn btn-primary" data-bind="enable: is_operational() && available(), click: gotostart, css: { 'needs-reset': need_reset }">Reset</button>
                 <button id="clutch_button" class="btn btn-primary" data-bind="visible: curvilinear(), enable: is_operational() && available(),click: toggle_clutch">Clutch</button>
             </div>
             <!-- Recording controls -->
