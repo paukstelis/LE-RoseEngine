@@ -76,6 +76,7 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
         self.i_feed = 0
 
         self.auto_reset = False
+        self.need_reset = False
         self.relative_return = False
         self.rr = False
         self.reset_cmds = False
@@ -1064,6 +1065,7 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
             self._printer.commands(["S0"])
 
     def _start_geo(self):
+        
         self.rock_work = []
         self.pump_work = []
         self._logger.debug("Starting geometric job")
@@ -1153,7 +1155,7 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
                 self._logger.debug(self.geo_depth)
         self._logger.debug("Geo radii diffs: %s", self.geo_radii)
         self._logger.debug("Geo angle diffs: %s", self.geo_angles)
-
+        self.need_reset = True
         self.jobThread = threading.Thread(target=self._geometric_thread).start()
 
     def _start_job(self):
@@ -1236,6 +1238,7 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
         self._logger.debug(f"Sum of Z movements: {np.sum(working_z)}")
         #self._logger.debug(working_angles)
         self._logger.debug(f"Sum of X movements: {np.sum(working_x)}")
+        self.need_reset = True
         self.jobThread = threading.Thread(target=self._job_thread).start()
 
     def _reset_gcode(self):
@@ -1250,44 +1253,31 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
         gcode.append(f"G92 A{theA}")
         return_gcode.append(f"G92 A{theA}")
         
-        #TODO: If using B-angle, it is possible that start position X is less than end, need to take into account
         x,z,a = self.start_coords["x"], self.start_coords["z"], self.start_coords["a"]
-        
-        #rock/geo only
-        if (len(self.rock_work) or len(self.geo_radii)) and not len(self.pump_work):
-            #assume we are just going to back and then in/out
-            if self.b_adjust: #do we need to compensate for the actual B-angle?
-                if self.current_x > x:
-                    self._logger.debug("current_x > than x")
-                    gcode.append(f"G94 G91 G1 X5 F1000")
-                    gcode.append(f"G90 G0 Z{z} A{a}")
-                    return_gcode.append(f"G90 G0 SC_Z A{a}")
-                    gcode.append(f"G90 G0 X{x}")
-                    return_gcode.append(f"G90 G0 SC_X")
-                else:
-                    gcode.append(f"G94 G90 G0 Z{z} X{x}")
-                    return_gcode.append(f"G94 G90 G0 SC_Z SC_X")
-                    gcode.append(f"G0 A{a}")
-                    return_gcode.append("G0 A{a}")
-            else:
-                gcode.append(f"G94 G90 G0 X{x}")
-                return_gcode.append(f"G94 G90 G0 SC_X")
-                gcode.append(f"G90 G0 Z{z} A{a}")
-                return_gcode.append(f"G90 G0 SC_Z A{a}")
+        x_return = f"G94 G90 G0 X{x}"
+        x_gcode = f"G94 G90 G0 SC_X"
+        z_return = f"G94 G90 G0 Z{z}"
+        z_gcode = f"G94 G90 G0 SC_Z"
+        a_return = f"G94 G90 G0 A{a}"
+        a_gcode = f"G0 A{a}"
 
-        #pump only
-        if len(self.pump_work) and not len(self.rock_work):
-            gcode.append(f"G94 G90 G0 Z{z}")
-            gcode.append(f"G0 X{x} A{a}")
-            return_gcode.append(f"G94 G90 G0 SC_Z")
-            return_gcode.append(f"G0 SC_X A{a}")
+        if self.reset_priority == "X":
+            gcode.append(x_return)
+            gcode.append(z_return)
+            gcode.append(a_return)
+            return_gcode.append(x_gcode)
+            return_gcode.append(z_return)
+            return_gcode.append(a_gcode)
 
-        #rock and pump, need to get special cases
-        if len(self.pump_work) and len(self.rock_work):
-            if self.reset_priority == "pump":
-                gcode.append(f"G94 G90 G0 Z{z}")
-            if self.reset_priority == "rock":
-                gcode.append(f"G94 G90 G0 X{x}")
+        if self.reset_priority == "Z":
+            gcode.append(z_return)
+            gcode.append(x_return)
+            gcode.append(a_return)
+            return_gcode.append(z_gcode)
+            return_gcode.append(x_return)
+            return_gcode.append(a_gcode)
+           
+        if self.reset_priority == "none":
             gcode.append(f"G94 G90 G0 Z{z} X{x}")
             gcode.append(f"G0 A{a}")
             return_gcode.append(f"G94 G90 G0 SC_Z SC_X")
@@ -1297,6 +1287,10 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
         gcode.append("M30")
         self.reset_cmds = False
         self._logger.debug(gcode)
+        self.need_reset = False
+
+        self._plugin_manager.send_plugin_message('roseengine',  dict(reset='reset'))
+
         self._printer.commands(gcode)
         if self.relative_return and self.recording:
             self.recorded.extend(return_gcode)       
