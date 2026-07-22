@@ -131,6 +131,11 @@ def convert_svg(_plugin, SVG_FILE):
     x_design = curve_pts.real - xmin
     z_design = curve_pts.imag
     z_design = z_design - ymin
+
+    sort_idx = np.argsort(x_design)
+    x_design = x_design[sort_idx]
+    z_design = z_design[sort_idx]
+
     svgspline = CubicSpline(x_design, z_design)
     sample_positions = np.arange(samples, dtype=float) * mm_per_step
     sample_positions = np.clip(sample_positions, 0.0, xdist)
@@ -142,4 +147,3 @@ def convert_svg(_plugin, SVG_FILE):
     _plugin.curve["z"] = curve_z
     _plugin._logger.debug(_plugin.curve)
 
-   
