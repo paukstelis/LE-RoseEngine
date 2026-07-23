@@ -1110,6 +1110,8 @@ $(function() {
             if (current === "#tab_plugin_roseengine") {
                 if (self.pump_profile === "None") { self.fetchProfileFiles(); }
                 self.fetchRosetteFiles();   // svg rosettes
+                self.fetchSavedGeos();
+                self.fetchCurveFiles();
             }
         };
 
