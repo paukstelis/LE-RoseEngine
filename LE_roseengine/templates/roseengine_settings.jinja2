@@ -65,7 +65,14 @@
             <input type="number" step="any" min="0" max="200" class="input-mini" data-bind="numeric, value: settings.plugins.roseengine.curve_stepdown"> Step down per pass (mm)
             <i class="icon icon-info-sign" title="The Z distance to step down per traversal of the pattern" data-toggle="tooltip"></i>
             </label>
-
+            <label>
+            <input type="checkbox" data-bind="checked: settings.plugins.roseengine.curve_retract">  Retract on reset
+            <i class="icon icon-info-sign" title="Retracts to the MAXIMUM Z value of curvilinear on reset before doing anything else." data-toggle="tooltip"></i>
+            </label>
+            <label>
+            <input type="number" step="any" min="0" max="50" class="input-mini" data-bind="numeric, value: settings.plugins.roseengine.curve_retract_extra"> Extra retraction (mm)
+            <i class="icon icon-info-sign" title="Extra retraction beyond maximum Z of curvlinear design." data-toggle="tooltip"></i>
+            </label>
 
         <h3>Laser options</h3>
         <label>
@@ -79,6 +86,10 @@
         <label>
             <input type="checkbox" data-bind="checked: settings.plugins.roseengine.laser_start">  Start laser with run
             <i class="icon icon-info-sign" title="Starts the laser as soon as the run begins" data-toggle="tooltip"></i>
+        </label>
+        <label>
+            <input type="number" step="1" min="0" max="1000" data-bind="numeric, value: settings.plugins.roseengine.laser_delay">  Laser power-on delay before movement (millisec)
+            <i class="icon icon-info-sign" title="Delay movement for this number of milliseconds to give the laser time to come up to power." data-toggle="tooltip"></i>
         </label>
         <label>
             <input type="checkbox" data-bind="checked: settings.plugins.roseengine.laser_stop">  Stop run after single pass

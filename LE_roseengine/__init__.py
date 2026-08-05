@@ -95,7 +95,7 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
         self.a_spline = None
         self.pump_profile = None
         #Curvilinear parameters
-        self.curve = {"active" : False, "diffs" : []}
+        self.curve = {"active" : False, "diffs" : [], "min": 0.0, "max": 0.0}
         self.curve_mm_rev = 0.0
         self.curve_recip = True
         self.curve_stepdown = 0.0
@@ -124,6 +124,7 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
         self.laser = False
         self.laser_feed = 0
         self.laser_base = 0
+        self.laser_delay = 0
         #laser settings
         self.power_correct = False
         self.max_correct = 3
@@ -161,6 +162,7 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
         self.use_m3 = bool(self._settings.get(["use_m3"]))
         self.laser_start = bool(self._settings.get(["laser_start"]))
         self.laser_stop = bool(self._settings.get(["laser_stop"]))
+        self.laser_delay = int(self._settings.get(["laser_delay"]))
         self.exp = bool(self._settings.get(["exp"]))
         self.geo_cutdepth = float(self._settings.get(["geo_cutdepth"]))
         self.geo_stepdown = float(self._settings.get(["geo_stepdown"]))
@@ -173,6 +175,8 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
         self.i_feed = float(self._settings.get(["i_feed"]))
         self.curve_mm_rev = float(self._settings.get(["mm_rev"]))
         self.curve_stepdown = float(self._settings.get(["curve_stepdown"]))
+        self.curve_retract = bool(self._settings.get(["curve_retract"]))
+        self.curve_retract_extra = float(self._settings.get(["curve_retract_extra"]))
         self.show_injects = bool(self._settings.get(["show_injects"]))
 
         storage = self._file_manager._storage("local")
@@ -206,6 +210,7 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
             power_correct=False,
             laser_start=False,
             laser_stop=False,
+            laser_delay=0,
             max_correct=10,
             min_correct=0.0001,
             r_radius=50,
@@ -224,6 +229,8 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
             i_feed=0,
             mm_rev=0.2,
             curve_stepdown=0.0,
+            curve_retract=False,
+            curve_retact_extra=0.0,
             show_injects=True
             )
     
@@ -713,6 +720,8 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
                 if self.use_m3:
                     lc="M3"
                 cmdlist.append(f"{lc} S{self.laser_base}")
+                if self.laser_delay:
+                    cmdlist.append(f"G4 P{self.laser_delay/1000}")
                 self.laser = True
             #cmdlist.append("M3 S1000")
             #used for laser radius tracking
@@ -871,6 +880,8 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
                 if self.use_m3:
                     lc="M3"
                 cmdlist.append(f"{lc} S{self.laser_base}")
+                if self.laser_delay:
+                    cmdlist.append(f"G4 P{self.laser_delay/1000}")
                 self.laser = True
             #cmdlist.append("M3 S1000")
             if len(phasecmds) > 0:
@@ -1197,6 +1208,8 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
             self.curve["xstep"] = self.curve_mm_rev/(360/self.a_inc)
             self.curve["idx"] = 0
             self.curve["diffs"] = np.diff(self.curve["z"])
+            self.curve["min"] = np.min(self.curve["z"])
+            self.curve["max"] = np.max(self.curve["z"])
             self._logger.debug(self.curve["diffs"])
             if self.curve_dir == -1:
                 self.curve["diffs"] = np.flip(self.curve["diffs"]*-1)
@@ -1252,8 +1265,20 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
             self.rr = True
         gcode.append(f"G92 A{theA}")
         return_gcode.append(f"G92 A{theA}")
-        
+        #starting position
         x,z,a = self.start_coords["x"], self.start_coords["z"], self.start_coords["a"]
+        #current position
+        cx,cz,ca = self.current_x, self.current_z, self.current_a
+        #difference
+        dx,dz = x+cx, z+cz
+        #handle curvilinear
+        retract = ""
+        if self.curve_retract:
+            #get Z difference from start relative to curvilinear
+            curve_z_retract = self.curve["max"] - dz + self.curve_retract_extra
+            #retract is relative...
+            retract = f"G94 G91 G0 Z{curve_z_retract}"
+
         x_return = f"G94 G90 G0 X{x}"
         x_gcode = f"G94 G90 G0 SC_X"
         z_return = f"G94 G90 G0 Z{z}"
@@ -1262,22 +1287,27 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
         a_gcode = f"G0 A{a}"
 
         if self.reset_priority == "X":
+            gcode.append(retract)
             gcode.append(x_return)
             gcode.append(z_return)
             gcode.append(a_return)
+            return_gcode.append(retract)
             return_gcode.append(x_gcode)
             return_gcode.append(z_return)
             return_gcode.append(a_gcode)
 
         if self.reset_priority == "Z":
+            gcode.append(retract)
             gcode.append(z_return)
             gcode.append(x_return)
             gcode.append(a_return)
+            return_gcode.append(retract)
             return_gcode.append(z_gcode)
             return_gcode.append(x_return)
             return_gcode.append(a_gcode)
            
         if self.reset_priority == "none":
+            gcode.append(retract)
             gcode.append(f"G94 G90 G0 Z{z} X{x}")
             gcode.append(f"G0 A{a}")
             return_gcode.append(f"G94 G90 G0 SC_Z SC_X")
@@ -1885,7 +1915,7 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
             if data["type"] == "pump":
                 self.pump_main = {"type":None}
                 self.pump_work = []
-                self.curve = {"active": False, "diffs": []}
+                self.curve = {"active": False, "diffs": [], "min": 0.0, "max": 0.0}
             return
 
         if command == "update_rpm":
