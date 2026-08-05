@@ -230,7 +230,7 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
             mm_rev=0.2,
             curve_stepdown=0.0,
             curve_retract=False,
-            curve_retact_extra=0.0,
+            curve_retract_extra=0.0,
             show_injects=True
             )
     
@@ -1286,7 +1286,7 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
         a_return = f"G94 G90 G0 A{a}"
         a_gcode = f"G0 A{a}"
 
-        if self.reset_priority == "X":
+        if self.reset_priority == "X" or self.reset_priority == "CURVE":
             gcode.append(retract)
             gcode.append(x_return)
             gcode.append(z_return)
