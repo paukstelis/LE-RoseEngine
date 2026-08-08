@@ -1283,7 +1283,7 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
         dx,dz = x+cx, z+cz
         #handle curvilinear
         retract = ""
-        if self.curve_retract:
+        if self.curve_retract and len(self.curve["diffs"]):
             #get Z difference from start relative to curvilinear
             curve_z_retract = self.curve["max"] - dz + self.curve_retract_extra
             #retract is relative...
