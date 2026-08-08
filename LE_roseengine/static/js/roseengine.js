@@ -102,9 +102,9 @@ $(function() {
                 .done(function(data) {
                     self.curvilinear(false);
                     var scans = data.children || [];
-                    // keep only files whose name starts with "X"
+                    // keep only files whose name ends with svg or dxf
                     scans = scans.filter(function(f) {
-                        return typeof f.name === "string" && f.name.endsWith("svg");
+                        return typeof f.name === "string" && (f.name.endsWith("svg") || f.name.endsWith("dxf"));
                     });
                     //self.scans = scans;
                     populateFileSelector(scans, "#curve_select", "machinecode");

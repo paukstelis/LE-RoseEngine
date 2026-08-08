@@ -244,7 +244,7 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
         self.initialize()
 
     def get_extension_tree(self, *args, **kwargs):
-        return {'model': {'png': ["png", "jpg", "jpeg", "gif", "txt", "stl", "svg", "json", "clr"]}}
+        return {'model': {'png': ["png", "dxf", "jpg", "jpeg", "gif", "txt", "stl", "svg", "json", "clr"]}}
 
     def get_assets(self):
         return {
@@ -294,7 +294,7 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
         return math.hypot(x - cx, y - cy)
 
     def load_curve(self, SVG):
-        #pass path to SVG, get curve
+        
         profiles.convert_svg(self, SVG)
         self.curve["active"] = True
 
@@ -598,7 +598,16 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
             except Exception as e:
                 self._logger.error(f"Failed to read/parse CLR file {filename}: {e}", exc_info=True)
                 raise
-
+        
+        if ext == ".dxf":
+            try:
+                path, attributes = profiles.dxf_to_path(filename)
+                center = None  # Could add DXF center detection if needed
+                angles, radii = self.resample_path_to_polar(path, center)
+            except Exception as e:
+                self._logger.error(f"Failed to read/parse DXF file {filename}: {e}", exc_info=True)
+                raise
+        
         if ext == ".svg":
             paths, attributes = svg2paths(filename)
             path = paths[0]  # assume single path
@@ -1715,8 +1724,9 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
 
         if command == "curve":
             path = data["path"]
-            self._logger.debug(f"Got curve path {path}")
+            
             if path is not "None":
+                #is it SVG or DXF?
                 self.load_curve(path)
                 json_figure = self._plot_curve(lc="black")
                 returndata = dict(type="curve", graph=json_figure)

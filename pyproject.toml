@@ -19,7 +19,7 @@ dynamic = [
 requires-python = ">=3.7, <4"
 
 # any additional requirements (besides OctoPrint) should be listed here
-dependencies = ["numpy","svgpathtools", "plotly"]
+dependencies = ["numpy","svgpathtools", "plotly", "ezdxf"]
 
 [tool.setuptools]
 include-package-data = true

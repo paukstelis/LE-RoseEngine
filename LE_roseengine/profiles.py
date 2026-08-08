@@ -2,13 +2,99 @@ import os
 import time
 import math
 import numpy as np
-from svgpathtools import svg2paths, Path
+import ezdxf
+from svgpathtools import svg2paths, Path, Line, Arc, CubicBezier
 from scipy.interpolate import CubicSpline
 from scipy.interpolate import RectBivariateSpline
 from scipy.integrate import quad
 from scipy.optimize import root_scalar
 
 #this is being adapted from Profiler plugin
+
+def dxf_to_path(dxf_file):
+
+    doc = ezdxf.readfile(dxf_file)
+    msp = doc.modelspace()
+    
+    segments = []
+    
+    for entity in msp:
+        if entity.dxftype() == 'LINE':
+            start = entity.dxf.start
+            end = entity.dxf.end
+            segments.append(Line(
+                complex(start.x, start.y),
+                complex(end.x, end.y)
+            ))
+        
+        elif entity.dxftype() == 'CIRCLE':
+            center = entity.dxf.center
+            radius = entity.dxf.radius
+            # Approximate circle as 4 cubic bezier arcs
+            from svgpathtools import parse_path
+            circle_path = parse_path(
+                f"M {center.x + radius},{center.y} "
+                f"A {radius},{radius} 0 1,1 {center.x - radius},{center.y} "
+                f"A {radius},{radius} 0 1,1 {center.x + radius},{center.y}"
+            )
+            segments.extend(circle_path)
+        
+        elif entity.dxftype() == 'ARC':
+            center = entity.dxf.center
+            radius = entity.dxf.radius
+            start_angle = np.radians(entity.dxf.start_angle)
+            end_angle = np.radians(entity.dxf.end_angle)
+            
+            start_pt = complex(
+                center.x + radius * np.cos(start_angle),
+                center.y + radius * np.sin(start_angle)
+            )
+            end_pt = complex(
+                center.x + radius * np.cos(end_angle),
+                center.y + radius * np.sin(end_angle)
+            )
+            
+            segments.append(Arc(
+                start=start_pt,
+                radius=complex(radius, radius),
+                rotation=0,
+                large_arc=(end_angle - start_angle) > np.pi,
+                sweep=True,
+                end=end_pt
+            ))
+        
+        elif entity.dxftype() in ('LWPOLYLINE', 'POLYLINE'):
+            points = list(entity.get_points())
+            for i in range(len(points) - 1):
+                p1 = points[i]
+                p2 = points[i + 1]
+                segments.append(Line(
+                    complex(p1[0], p1[1]),
+                    complex(p2[0], p2[1])
+                ))
+            if entity.is_closed:
+                p1 = points[-1]
+                p2 = points[0]
+                segments.append(Line(
+                    complex(p1[0], p1[1]),
+                    complex(p2[0], p2[1])
+                ))
+        
+        elif entity.dxftype() == 'SPLINE':
+            # Convert spline to polyline approximation
+            points = list(entity.flattening(0.01))  # 0.01mm tolerance
+            for i in range(len(points) - 1):
+                p1 = points[i]
+                p2 = points[i + 1]
+                segments.append(Line(
+                    complex(p1.x, p1.y),
+                    complex(p2.x, p2.y)
+                ))
+    
+    if not segments:
+        raise ValueError("No supported entities found in DXF")
+    
+    return Path(*segments), [{'id': ''}]
 
 def createsplines(_plugin, filepath):
     folder = _plugin._settings.getBaseFolder("uploads")
@@ -102,7 +188,15 @@ def ovality_mod(_plugin, x, a_deg):
 def convert_svg(_plugin, SVG_FILE):
     folder = _plugin._settings.getBaseFolder("uploads")
     filename = f"{folder}/{SVG_FILE}"
-    paths, attributes = svg2paths(filename)
+    #seemes easist to do dxf check here
+    _plugin._logger.info(filename)
+    ext = os.path.splitext(SVG_FILE)[1].lower()
+    _plugin._logger.info(f"Got curve path {SVG_FILE} with ext {ext}")
+    if ext == ".dxf":
+        paths, attributes = dxf_to_path(filename)
+        _plugin._logger.info(paths)
+    else:
+        paths, attributes = svg2paths(filename)
     if not paths:
         raise ValueError("No paths in SVG")
 
@@ -125,7 +219,7 @@ def convert_svg(_plugin, SVG_FILE):
     samples_per_rev = max(1, int(round(360 / _plugin.a_inc)))
     mm_per_step = _plugin.curve_mm_rev / samples_per_rev
     samples = int(xdist / mm_per_step)
-    _plugin._logger.debug(f"Calculating curvilinear path samples. spr: {samples_per_rev}, mm_step: {mm_per_step}, samples: {samples}")
+    _plugin._logger.info(f"Calculating curvilinear path samples. spr: {samples_per_rev}, mm_step: {mm_per_step}, samples: {samples}")
     t_vals = np.linspace(0.0, 1.0, samples)
     curve_pts = np.array([profile_path.point(t) for t in t_vals])
     x_design = curve_pts.real - xmin
