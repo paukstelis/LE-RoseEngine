@@ -602,6 +602,7 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
         if ext == ".dxf":
             try:
                 path, attributes = profiles.dxf_to_path(filename)
+                path = path[0]
                 center = None  # Could add DXF center detection if needed
                 angles, radii = self.resample_path_to_polar(path, center)
             except Exception as e:

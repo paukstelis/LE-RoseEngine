@@ -19,12 +19,13 @@ def dxf_to_path(dxf_file):
     segments = []
     
     for entity in msp:
+        
         if entity.dxftype() == 'LINE':
             start = entity.dxf.start
             end = entity.dxf.end
             segments.append(Line(
-                complex(start.x, start.y),
-                complex(end.x, end.y)
+                complex(start.x, -start.y),
+                complex(end.x, -end.y)
             ))
         
         elif entity.dxftype() == 'CIRCLE':
@@ -33,9 +34,9 @@ def dxf_to_path(dxf_file):
             # Approximate circle as 4 cubic bezier arcs
             from svgpathtools import parse_path
             circle_path = parse_path(
-                f"M {center.x + radius},{center.y} "
-                f"A {radius},{radius} 0 1,1 {center.x - radius},{center.y} "
-                f"A {radius},{radius} 0 1,1 {center.x + radius},{center.y}"
+                f"M {center.x + radius},{-center.y} "
+                f"A {radius},{radius} 0 1,1 {center.x - radius},{-center.y} "
+                f"A {radius},{radius} 0 1,1 {center.x + radius},{-center.y}"
             )
             segments.extend(circle_path)
         
@@ -47,11 +48,11 @@ def dxf_to_path(dxf_file):
             
             start_pt = complex(
                 center.x + radius * np.cos(start_angle),
-                center.y + radius * np.sin(start_angle)
+                -(center.y + radius * np.sin(start_angle))
             )
             end_pt = complex(
                 center.x + radius * np.cos(end_angle),
-                center.y + radius * np.sin(end_angle)
+                -(center.y + radius * np.sin(end_angle))
             )
             
             segments.append(Arc(
@@ -69,15 +70,15 @@ def dxf_to_path(dxf_file):
                 p1 = points[i]
                 p2 = points[i + 1]
                 segments.append(Line(
-                    complex(p1[0], p1[1]),
-                    complex(p2[0], p2[1])
+                    complex(p1[0], -p1[1]),
+                    complex(p2[0], -p2[1])
                 ))
             if entity.is_closed:
                 p1 = points[-1]
                 p2 = points[0]
                 segments.append(Line(
-                    complex(p1[0], p1[1]),
-                    complex(p2[0], p2[1])
+                    complex(p1[0], -p1[1]),
+                    complex(p2[0], -p2[1])
                 ))
         
         elif entity.dxftype() == 'SPLINE':
@@ -87,14 +88,16 @@ def dxf_to_path(dxf_file):
                 p1 = points[i]
                 p2 = points[i + 1]
                 segments.append(Line(
-                    complex(p1.x, p1.y),
-                    complex(p2.x, p2.y)
+                    complex(p1.x, -p1.y),
+                    complex(p2.x, -p2.y)
                 ))
     
     if not segments:
         raise ValueError("No supported entities found in DXF")
-    
-    return Path(*segments), [{'id': ''}]
+    path = Path(*segments)
+    if path.start.real > path.end.real:
+       path = path.reversed()
+    return [path], [{'id': ''}]
 
 def createsplines(_plugin, filepath):
     folder = _plugin._settings.getBaseFolder("uploads")
