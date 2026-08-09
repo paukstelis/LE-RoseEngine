@@ -31,20 +31,37 @@ def dxf_to_path(dxf_file):
         elif entity.dxftype() == 'CIRCLE':
             center = entity.dxf.center
             radius = entity.dxf.radius
-            # Approximate circle as 4 cubic bezier arcs
-            from svgpathtools import parse_path
-            circle_path = parse_path(
-                f"M {center.x + radius},{-center.y} "
-                f"A {radius},{radius} 0 1,1 {center.x - radius},{-center.y} "
-                f"A {radius},{radius} 0 1,1 {center.x + radius},{-center.y}"
-            )
-            segments.extend(circle_path)
+            # Full circle as two 180° arcs
+            start_pt = complex(center.x + radius, -center.y)
+            mid_pt = complex(center.x - radius, -center.y)
+            
+            segments.append(Arc(
+                start=start_pt,
+                radius=complex(radius, radius),
+                rotation=0,
+                large_arc=False,
+                sweep=False,  # Counter-clockwise to account for Y-flip
+                end=mid_pt
+            ))
+            segments.append(Arc(
+                start=mid_pt,
+                radius=complex(radius, radius),
+                rotation=0,
+                large_arc=False,
+                sweep=False,
+                end=start_pt
+            ))
         
         elif entity.dxftype() == 'ARC':
             center = entity.dxf.center
             radius = entity.dxf.radius
             start_angle = np.radians(entity.dxf.start_angle)
             end_angle = np.radians(entity.dxf.end_angle)
+            
+            # Calculate arc span (handle wrap-around)
+            angle_span = end_angle - start_angle
+            if angle_span < 0:
+                angle_span += 2 * np.pi
             
             start_pt = complex(
                 center.x + radius * np.cos(start_angle),
@@ -55,12 +72,15 @@ def dxf_to_path(dxf_file):
                 -(center.y + radius * np.sin(end_angle))
             )
             
+            # SVG Arc parameters
+            # large_arc: 1 if arc spans > 180°
+            # sweep: 0 for counter-clockwise (flipped due to Y-inversion)
             segments.append(Arc(
                 start=start_pt,
                 radius=complex(radius, radius),
                 rotation=0,
-                large_arc=(end_angle - start_angle) > np.pi,
-                sweep=True,
+                large_arc=(angle_span > np.pi),
+                sweep=False,  # Counter-clockwise due to Y-flip
                 end=end_pt
             ))
         
@@ -69,21 +89,66 @@ def dxf_to_path(dxf_file):
             for i in range(len(points) - 1):
                 p1 = points[i]
                 p2 = points[i + 1]
-                segments.append(Line(
-                    complex(p1[0], -p1[1]),
-                    complex(p2[0], -p2[1])
-                ))
+                
+                # Check if segment has bulge (arc indicator)
+                bulge = p1[4] if len(p1) > 4 else 0.0
+                
+                if abs(bulge) < 1e-10:
+                    # Straight line
+                    segments.append(Line(
+                        complex(p1[0], -p1[1]),
+                        complex(p2[0], -p2[1])
+                    ))
+                else:
+                    # Arc segment - bulge defines the arc
+                    start_pt = complex(p1[0], -p1[1])
+                    end_pt = complex(p2[0], -p2[1])
+                    
+                    # Calculate arc parameters from bulge
+                    chord_vec = end_pt - start_pt
+                    chord_len = abs(chord_vec)
+                    sagitta = (chord_len / 2.0) * bulge
+                    radius = (chord_len**2 + 4*sagitta**2) / (8 * abs(sagitta))
+                    
+                    segments.append(Arc(
+                        start=start_pt,
+                        radius=complex(radius, radius),
+                        rotation=0,
+                        large_arc=(abs(bulge) > 1.0),
+                        sweep=(bulge < 0),  # Negative bulge = clockwise
+                        end=end_pt
+                    ))
+            
             if entity.is_closed:
                 p1 = points[-1]
                 p2 = points[0]
-                segments.append(Line(
-                    complex(p1[0], -p1[1]),
-                    complex(p2[0], -p2[1])
-                ))
+                bulge = p1[4] if len(p1) > 4 else 0.0
+                
+                if abs(bulge) < 1e-10:
+                    segments.append(Line(
+                        complex(p1[0], -p1[1]),
+                        complex(p2[0], -p2[1])
+                    ))
+                else:
+                    start_pt = complex(p1[0], -p1[1])
+                    end_pt = complex(p2[0], -p2[1])
+                    chord_vec = end_pt - start_pt
+                    chord_len = abs(chord_vec)
+                    sagitta = (chord_len / 2.0) * bulge
+                    radius = (chord_len**2 + 4*sagitta**2) / (8 * abs(sagitta))
+                    
+                    segments.append(Arc(
+                        start=start_pt,
+                        radius=complex(radius, radius),
+                        rotation=0,
+                        large_arc=(abs(bulge) > 1.0),
+                        sweep=(bulge < 0),
+                        end=end_pt
+                    ))
         
         elif entity.dxftype() == 'SPLINE':
-            # Convert spline to polyline approximation
-            points = list(entity.flattening(0.01))  # 0.01mm tolerance
+            # Splines still need approximation as lines
+            points = list(entity.flattening(0.01))
             for i in range(len(points) - 1):
                 p1 = points[i]
                 p2 = points[i + 1]
