@@ -2,13 +2,167 @@ import os
 import time
 import math
 import numpy as np
-from svgpathtools import svg2paths, Path
+import ezdxf
+from svgpathtools import svg2paths, Path, Line, Arc, CubicBezier
 from scipy.interpolate import CubicSpline
 from scipy.interpolate import RectBivariateSpline
 from scipy.integrate import quad
 from scipy.optimize import root_scalar
 
 #this is being adapted from Profiler plugin
+
+def dxf_to_path(dxf_file):
+
+    doc = ezdxf.readfile(dxf_file)
+    msp = doc.modelspace()
+    
+    segments = []
+    
+    for entity in msp:
+        
+        if entity.dxftype() == 'LINE':
+            start = entity.dxf.start
+            end = entity.dxf.end
+            segments.append(Line(
+                complex(start.x, -start.y),
+                complex(end.x, -end.y)
+            ))
+        
+        elif entity.dxftype() == 'CIRCLE':
+            center = entity.dxf.center
+            radius = entity.dxf.radius
+            # Full circle as two 180° arcs
+            start_pt = complex(center.x + radius, -center.y)
+            mid_pt = complex(center.x - radius, -center.y)
+            
+            segments.append(Arc(
+                start=start_pt,
+                radius=complex(radius, radius),
+                rotation=0,
+                large_arc=False,
+                sweep=False,  # Counter-clockwise to account for Y-flip
+                end=mid_pt
+            ))
+            segments.append(Arc(
+                start=mid_pt,
+                radius=complex(radius, radius),
+                rotation=0,
+                large_arc=False,
+                sweep=False,
+                end=start_pt
+            ))
+        
+        elif entity.dxftype() == 'ARC':
+            center = entity.dxf.center
+            radius = entity.dxf.radius
+            start_angle = np.radians(entity.dxf.start_angle)
+            end_angle = np.radians(entity.dxf.end_angle)
+            
+            # Calculate arc span (handle wrap-around)
+            angle_span = end_angle - start_angle
+            if angle_span < 0:
+                angle_span += 2 * np.pi
+            
+            start_pt = complex(
+                center.x + radius * np.cos(start_angle),
+                -(center.y + radius * np.sin(start_angle))
+            )
+            end_pt = complex(
+                center.x + radius * np.cos(end_angle),
+                -(center.y + radius * np.sin(end_angle))
+            )
+            
+            # SVG Arc parameters
+            # large_arc: 1 if arc spans > 180°
+            # sweep: 0 for counter-clockwise (flipped due to Y-inversion)
+            segments.append(Arc(
+                start=start_pt,
+                radius=complex(radius, radius),
+                rotation=0,
+                large_arc=(angle_span > np.pi),
+                sweep=False,  # Counter-clockwise due to Y-flip
+                end=end_pt
+            ))
+        
+        elif entity.dxftype() in ('LWPOLYLINE', 'POLYLINE'):
+            points = list(entity.get_points())
+            for i in range(len(points) - 1):
+                p1 = points[i]
+                p2 = points[i + 1]
+                
+                # Check if segment has bulge (arc indicator)
+                bulge = p1[4] if len(p1) > 4 else 0.0
+                
+                if abs(bulge) < 1e-10:
+                    # Straight line
+                    segments.append(Line(
+                        complex(p1[0], -p1[1]),
+                        complex(p2[0], -p2[1])
+                    ))
+                else:
+                    # Arc segment - bulge defines the arc
+                    start_pt = complex(p1[0], -p1[1])
+                    end_pt = complex(p2[0], -p2[1])
+                    
+                    # Calculate arc parameters from bulge
+                    chord_vec = end_pt - start_pt
+                    chord_len = abs(chord_vec)
+                    sagitta = (chord_len / 2.0) * bulge
+                    radius = (chord_len**2 + 4*sagitta**2) / (8 * abs(sagitta))
+                    
+                    segments.append(Arc(
+                        start=start_pt,
+                        radius=complex(radius, radius),
+                        rotation=0,
+                        large_arc=(abs(bulge) > 1.0),
+                        sweep=(bulge < 0),  # Negative bulge = clockwise
+                        end=end_pt
+                    ))
+            
+            if entity.is_closed:
+                p1 = points[-1]
+                p2 = points[0]
+                bulge = p1[4] if len(p1) > 4 else 0.0
+                
+                if abs(bulge) < 1e-10:
+                    segments.append(Line(
+                        complex(p1[0], -p1[1]),
+                        complex(p2[0], -p2[1])
+                    ))
+                else:
+                    start_pt = complex(p1[0], -p1[1])
+                    end_pt = complex(p2[0], -p2[1])
+                    chord_vec = end_pt - start_pt
+                    chord_len = abs(chord_vec)
+                    sagitta = (chord_len / 2.0) * bulge
+                    radius = (chord_len**2 + 4*sagitta**2) / (8 * abs(sagitta))
+                    
+                    segments.append(Arc(
+                        start=start_pt,
+                        radius=complex(radius, radius),
+                        rotation=0,
+                        large_arc=(abs(bulge) > 1.0),
+                        sweep=(bulge < 0),
+                        end=end_pt
+                    ))
+        
+        elif entity.dxftype() == 'SPLINE':
+            # Splines still need approximation as lines
+            points = list(entity.flattening(0.01))
+            for i in range(len(points) - 1):
+                p1 = points[i]
+                p2 = points[i + 1]
+                segments.append(Line(
+                    complex(p1.x, -p1.y),
+                    complex(p2.x, -p2.y)
+                ))
+    
+    if not segments:
+        raise ValueError("No supported entities found in DXF")
+    path = Path(*segments)
+    if path.start.real > path.end.real:
+       path = path.reversed()
+    return [path], [{'id': ''}]
 
 def createsplines(_plugin, filepath):
     folder = _plugin._settings.getBaseFolder("uploads")
@@ -102,7 +256,15 @@ def ovality_mod(_plugin, x, a_deg):
 def convert_svg(_plugin, SVG_FILE):
     folder = _plugin._settings.getBaseFolder("uploads")
     filename = f"{folder}/{SVG_FILE}"
-    paths, attributes = svg2paths(filename)
+    #seemes easist to do dxf check here
+    _plugin._logger.info(filename)
+    ext = os.path.splitext(SVG_FILE)[1].lower()
+    _plugin._logger.info(f"Got curve path {SVG_FILE} with ext {ext}")
+    if ext == ".dxf":
+        paths, attributes = dxf_to_path(filename)
+        _plugin._logger.info(paths)
+    else:
+        paths, attributes = svg2paths(filename)
     if not paths:
         raise ValueError("No paths in SVG")
 
@@ -125,7 +287,7 @@ def convert_svg(_plugin, SVG_FILE):
     samples_per_rev = max(1, int(round(360 / _plugin.a_inc)))
     mm_per_step = _plugin.curve_mm_rev / samples_per_rev
     samples = int(xdist / mm_per_step)
-    _plugin._logger.debug(f"Calculating curvilinear path samples. spr: {samples_per_rev}, mm_step: {mm_per_step}, samples: {samples}")
+    _plugin._logger.info(f"Calculating curvilinear path samples. spr: {samples_per_rev}, mm_step: {mm_per_step}, samples: {samples}")
     t_vals = np.linspace(0.0, 1.0, samples)
     curve_pts = np.array([profile_path.point(t) for t in t_vals])
     x_design = curve_pts.real - xmin

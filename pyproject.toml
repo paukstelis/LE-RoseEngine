@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "LE-RoseEngine"
-version = "0.2.7"
+version = "0.2.8"
 
 
 description = "Rose Engine emulator for the LatheEngraver"
@@ -19,7 +19,7 @@ dynamic = [
 requires-python = ">=3.7, <4"
 
 # any additional requirements (besides OctoPrint) should be listed here
-dependencies = ["numpy","svgpathtools", "plotly"]
+dependencies = ["numpy","svgpathtools", "plotly", "ezdxf"]
 
 [tool.setuptools]
 include-package-data = true
