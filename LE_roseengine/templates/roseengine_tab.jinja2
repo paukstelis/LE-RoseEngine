@@ -90,12 +90,7 @@
                         <input id="pump_invert" type="checkbox" data-bind="checked: pump_invert">
                     </label>
                 </div>
-                <div data-bind="visible: exp">
-                    <label>Available X scans:</label>
-                        <select id="scan_pump_select" data-bind="">
-                    </select>
-                </div>
-                <div data-bind="visible: exp">
+                <div>
                     <details>
                     <summary>Curvilinear</summary>
                     <label>Curvilinear SVG/DXF:</label>
@@ -103,14 +98,19 @@
                     </select>
                     
                     <label>Direction:</label>
-                    <select id="wave_type" data-bind="value: curve_dir">
+                    <select id="curve_dir" data-bind="value: curve_dir">
                         <option value="1">Left-to-Right</option>
                         <option value="-1">Right-to-Left</option>
                     </select>
+
+                    <label title="Helical angle incremented over the length of the curvilinear pattern" for="helical">Helical Angle:</label>
+                    <input id="helical" type="number" step="any" data-bind="value: helical">            
+
                     <label title="Reciprocate along profile, otherwise stop at the end of profile." data-toggle="tooltip" for="recip">
                         Reciprocate:
                         <input id="recip" type="checkbox" checked data-bind="checked: recip">
                     </label>
+                    <label 
                     </details>
                 </div>
                 <div style="margin-top: auto; display: flex; justify-content: center;">

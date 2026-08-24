@@ -95,11 +95,12 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
         self.a_spline = None
         self.pump_profile = None
         #Curvilinear parameters
-        self.curve = {"active" : False, "diffs" : [], "min": 0.0, "max": 0.0}
+        self.curve = {"active" : False, "diffs" : [], "min": 0.0, "max": 0.0, "length": 0.0, "spiral": 0.0}
         self.curve_mm_rev = 0.0
         self.curve_recip = True
         self.curve_stepdown = 0.0
         self.curve_dir = "l2r"
+        self.curve_spiral = 0.0
 
         self.write_mode = False
         self.inch = False
@@ -856,7 +857,6 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
             self._printer.commands(["S0"])
 
 
-#TODO: rework this. Yuck. if using radial offset have to figure out how to handle angles with rock+pump. May need to move to using python plotly for everything
     def _job_thread(self):  
         self._logger.info("Starting job thread")
         self._plugin_manager.send_plugin_message("latheengraver", dict(type='clear_all'))
@@ -901,6 +901,8 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
             
             if not self.forward:
                 self.working_angles = self.working_angles*-1
+                #reverse the spiral direction so it gets added to a moves
+                self.curve["spiral"] = self.curve["spiral"]*-1
             count = 0
             while self.running:
 
@@ -950,6 +952,8 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
                             curvechunk.extend(take)
                             self.curve["idx"] = idx + len(take)
                             if self.curve["idx"] >= len(diffs):
+                                if self.curve_spiral:
+                                    break
                                 if self.curve_recip:
                                     self.curve["dir"] = dirn*-1
                                     self.curve["idx"] = 0
@@ -993,6 +997,8 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
                             try:
                                 z = z + curvechunk[c]
                                 x = x + (self.curve["xstep"] * self.curve["dir"])
+                                if self.curve["active"]:
+                                    a = a + self.curve["spiral"] 
                             except:
                                 self._logger.info(f"Curve step out of range must be reversing, direction is now {self.curve['dir']}")
                         if self.use_scan:
@@ -1226,6 +1232,8 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
                 self.curve["dir"] = -1
             else:
                 self.curve["dir"] = 1
+            if self.curve_spiral:
+                self.curve["spiral"] = self.curve_spiral / len(self.curve["diffs"])
 
         if self.ellipse:
             e_vals = []
@@ -1830,6 +1838,7 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
             self.gcode_geo = bool(data["gcode_geo"])
             self.curve_dir = int(data["curve_dir"])
             self.curve_recip = bool(data["recip"]) 
+            self.curve_spiral = float(data["helical"])
             self._logger.info("ready to start job")
             if float(data["e_ratio"]) > 1.0 and not self.rock_main["type"] == "geometric":
                 rad = float(data["e_rad"])
@@ -1926,7 +1935,7 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
             if data["type"] == "pump":
                 self.pump_main = {"type":None}
                 self.pump_work = []
-                self.curve = {"active": False, "diffs": [], "min": 0.0, "max": 0.0}
+                self.curve = {"active": False, "diffs": [], "min": 0.0, "max": 0.0, "length": 0.0, "spiral": 0.0}
             return
 
         if command == "update_rpm":

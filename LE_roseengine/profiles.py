@@ -307,5 +307,6 @@ def convert_svg(_plugin, SVG_FILE):
     _plugin.curve["zdist"] = zdist
     _plugin.curve["x"] = sample_positions #probably only need to store this for coordinate case...
     _plugin.curve["z"] = curve_z
+    _plugin.curve["length"] = xdist
     _plugin._logger.debug(_plugin.curve)
 

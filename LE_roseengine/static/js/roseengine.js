@@ -61,6 +61,7 @@ $(function() {
         self.clutch = ko.observable(true);
         self.curve_dir = ko.observable(1);
         self.recip = ko.observable(true);
+        self.helical = ko.observable(0.0);
 
         //Recording
         self.recording  = ko.observable(false);
@@ -100,7 +101,7 @@ $(function() {
         self.fetchCurveFiles = function() {
             OctoPrint.files.listForLocation("local/scans", false)
                 .done(function(data) {
-                    self.curvilinear(false);
+                    //self.curvilinear(false);
                     var scans = data.children || [];
                     // keep only files whose name ends with svg or dxf
                     scans = scans.filter(function(f) {
@@ -950,6 +951,7 @@ $(function() {
                 wm: self.wm,
                 curve_dir: self.curve_dir(),
                 recip: self.recip(),
+                helical: self.helical(),
                
 
             };
