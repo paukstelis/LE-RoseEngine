@@ -216,7 +216,6 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
             laser_start=False,
             laser_stop=False,
             laser_delay=0,
-            laser_delay=0,
             max_correct=10,
             min_correct=0.0001,
             r_radius=50,
@@ -235,8 +234,6 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
             i_feed=0,
             mm_rev=0.2,
             curve_stepdown=0.0,
-            curve_retract=False,
-            curve_retract_extra=0.0,
             curve_retract=False,
             curve_retract_extra=0.0,
             show_injects=True
@@ -879,242 +876,6 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
             self._printer.commands(["S0"])
 
 
-    def _job_thread(self):  
-        self._logger.info("Starting job thread")
-        self._plugin_manager.send_plugin_message("latheengraver", dict(type='clear_all'))
-        self.cum_inject = {"X": 0.0, "Z" : 0.0}
-        #phase offsets applied here to the working array
-        phasecmds = []
-        pump_rad_start = 0
-        if self.pump_offset and self.pump_main["type"]:
-            #base the roll on self.a_inc
-            roll = int(self.pump_offset/self.a_inc)
-            #determine absolute value at this position from main
-            zero_pump = self.pump_main["radii"][0]
-            pump_rad_start = zero_pump - self.pump_main["radii"][roll]
-            
-            self.working_x = np.roll(self.working_x, roll)
-            phasecmds.append(f"G0 G91 X{pump_rad_start:0.4f}")
-            self._logger.debug(f"pump phase offset X value: {pump_rad_start}, phasecmds: {phasecmds}")
-
-        try:
-            bf_target = self.bf_target
-            degrees_sec = (self.rpm * 360) / 60
-            degrees_chunk = self.chunk * self.a_inc
-            loop_start = None
-            loop_end = None
-            cmdlist = []
-            cmd_buffer = []
-            #cmdlist.append("G92 A0")
-            ovality_z = 0 #this is how far we have already moved Z at any point
-            if self.laser_mode and self.laser_start:
-                lc = "M4"
-                if self.use_m3:
-                    lc="M3"
-                cmdlist.append(f"{lc} S{self.laser_base}")
-                if self.laser_delay:
-                    cmdlist.append(f"G4 P{self.laser_delay/1000}")
-                if self.laser_delay:
-                    cmdlist.append(f"G4 P{self.laser_delay/1000}")
-                self.laser = True
-            #cmdlist.append("M3 S1000")
-            if len(phasecmds) > 0:
-                cmdlist.extend(phasecmds)
-                self._logger.debug(f"Phase commands added, cmdlist is: {cmdlist}")
-            track = {"x": self.start_coords["x"], "z": self.start_coords["z"], "a": self.start_coords["a"]}
-            
-            if not self.forward:
-                self.working_angles = self.working_angles*-1
-                #reverse the spiral direction so it gets added to a moves
-                self.curve["spiral"] = self.curve["spiral"]*-1
-            count = 0
-            while self.running:
-
-                self.buffer = 0
-                degrees_sec = (self.rpm * 360) / 60
-                degrees_chunk = self.chunk * self.a_inc
-                time_unit = self.a_inc/degrees_sec * 1000 #ms
-                tms = round(time.time() * 1000)
-                if loop_start:
-                    #test for rock only
-                    #areset = count*360 + self.start_coords["a"]
-                    #cmdlist.append(f"G94 G90 G0 Z{self.start_coords['z']} A{areset}")
-                    self._logger.debug(f"loop time ms: {tms - loop_start}")
-                    self._logger.debug(f"Z-positiong at loop: {track['z']}")
-                    if self.curve["active"]:
-                        idx = self.curve["idx"]
-                        self._logger.debug(f"curve idx: {idx} curve X: {self.curve['x'][idx]} curve Z: {self.curve['z'][idx]}")
-                loop_start = tms
-                self.feedcontrol["current"] = tms
-                
-                #first chunk will be full size
-                next_interval = int(degrees_chunk / degrees_sec * 1000)  # in milliseconds
-                self.feedcontrol["next"] = self.feedcontrol["current"] + next_interval
-                current_angle = 0
-                #right now self.working is just rock, pump, mod 
-                for i in range(0, len(self.working_angles), self.chunk):
-                    with self.rpm_lock:
-                        if self.updated_rpm > 0:
-                            #self._logger.info("Updating RPM")
-                            self.rpm = self.updated_rpm
-                            self.updated_rpm = 0.0
-                            degrees_sec = (self.rpm * 360) / 60
-                            next_interval = int(degrees_chunk / degrees_sec * 1000)  
-                    feed = (360/self.a_inc) * self.rpm
-                    zchunk = self.working_z[i:i+self.chunk]
-                    achunk = self.working_angles[i:i+self.chunk]
-                    xchunk = self.working_x[i:i+self.chunk]
-                    modchunk = self.working_mod[i:i+self.chunk]
-                    curvechunk = []
-                    if self.curve["active"] and len(self.curve["diffs"]):
-                        diffs = self.curve["diffs"]
-                        dirn = self.curve["dir"]
-                        while len(curvechunk) < len(achunk):
-                            idx = self.curve["idx"]
-                            need = len(achunk) - len(curvechunk)
-                            take = diffs[idx:idx + need]
-                            curvechunk.extend(take)
-                            self.curve["idx"] = idx + len(take)
-                            if self.curve["idx"] >= len(diffs):
-                                if self.curve_spiral:
-                                    break
-                                if self.curve_recip:
-                                    self.curve["dir"] = dirn*-1
-                                    self.curve["idx"] = 0
-                                    self.curve["diffs"] = np.flip(diffs * -1)
-                                    #these are just for record keeping
-                                    self.curve["x"] = np.flip(self.curve["x"])
-                                    self.curve["z"] = np.flip(self.curve["z"])
-                                    if self.curve_stepdown and not self.inject:
-                                        self.inject = ("Z", -float(self.curve_stepdown))
-                                        self._logger.debug("Pass done, injecting step down")
-                                    continue
-                                else:
-                                    self.curve["active"] = False
-                                    break
-
-                        curvechunk = curvechunk[:len(achunk)]
-                    else:
-                        curvechunk = []
-                    chunk_distance = 0
-                    #tofix
-                    current_angle = track["a"]
-                    
-                    for c in range(0, len(achunk)):
-                        a = achunk[c]
-                        z = zchunk[c]
-                        x = xchunk[c]
-                        m = modchunk[c]
-                        track["z"] = track["z"] + z
-                        track["x"] = track["x"] + x
-                        track["a"] = track["a"] + a
-
-                        if self.b_adjust:
-                            bangle = math.radians(self.current_b - self.bref) *-1
-                            x = x*math.cos(bangle) + z*math.sin(bangle)
-                            z = -x*math.sin(bangle) + z*math.cos(bangle)
-
-                        if self.ellipse:
-                            z = z + m
-
-                        if len(curvechunk):
-                            try:
-                                z = z + curvechunk[c]
-                                x = x + (self.curve["xstep"] * self.curve["dir"])
-                                if self.curve["active"]:
-                                    a = a + self.curve["spiral"] 
-                            except:
-                                self._logger.info(f"Curve step out of range must be reversing, direction is now {self.curve['dir']}")
-                        if self.use_scan:
-                            #just assume we are doing pumping
-                            zdiff = profiles.ovality_mod(self,track["x"],track["a"])
-                            tx = track["x"]
-                            ta = track["a"]
-                            delta_ov = zdiff - ovality_z
-                            z = z + delta_ov
-                            ovality_z = zdiff
-                            #self._logger.info(f"Zdiff is {zdiff} delta_ov is {delta_ov}")
-                        
-                        if self.laser_mode and self.laser:
-                            #calculate the chunk distance
-                            arc = track["z"] * math.radians(self.a_inc)
-                            chunk_distance = chunk_distance + math.sqrt(arc**2 + x**2 + z**2)
-
-                        cmdlist.append(f"G93 G91 G1 X{x:0.6f} A{a:0.6f} Z{z:0.6f} F{feed:0.1f}")
-                    
-                    if self.laser and chunk_distance and self.power_correct:
-                        #figure out scaling of power here
-                        calc_time = len(achunk) / (feed) #time in minutes to complete chunk
-                        nf = chunk_distance/calc_time #calculated feed
-                        sf = nf/self.laser_feed
-                        if sf < self.min_correct:
-                            sf = self.min_correct
-                        if sf > self.max_correct:
-                            sf = self.max_correct
-                        scaled = int(self.laser_base * sf)
-                        self._logger.debug(f"calc time: {calc_time}, nf: {nf}, sf: {sf}, scaled: {scaled}")
-                        cmdlist[0] = cmdlist[0] + f" S{scaled}"
-                    
-                    #All modifications should be PRE injection
-                    if self.inject:
-                        if not isinstance(self.inject,tuple) and self.inject.startswith("S") and self.laser_mode:
-                            m = re.search(r"S\s*=?\s*([0-9]+)", self.inject, re.IGNORECASE)
-                            if m:
-                                val = int(m.group(1))
-                                # set laser state and base power
-                                if val == 0:
-                                    self.laser = False
-                                    cmdlist.append("S0")
-                                else:
-                                    self.laser = True
-                                    self.laser_base = val
-                                    lc = "M4"
-                                    if self.use_m3:
-                                        lc="M3"
-                                    cmdlist.append(f"{lc} S{val}")
-                                    self._logger.info(f"Injected laser power command M4 S{val}, laser={'on' if self.laser else 'off'}")
-                            else:
-                                self._logger.warning(f"Unrecognized S-inject format: {self.inject}")
-                            self.inject = None
-                        else:
-                            cmdlist[-1] = self._update_injection(cmdlist[-1], self.inject)
-                            self.inject = None
-                    # Loop until we are ready to send the next chunk
-                    if not self.write_mode:
-                        tms = round(time.time() * 1000)
-                        while self.feedcontrol["next"] - tms > self.ms_threshold or self.buffer < bf_target:
-                                time.sleep(self.ms_threshold/2000)
-                                tms = round(time.time() * 1000)
-                                if not self.running:
-                                    break
-                        self._printer.commands(cmdlist)
-                        self.buffer_received = False
-                    else:
-                        cmd_buffer.extend(cmdlist)
-                    #in case RPM has changed
-                    degrees_sec = (self.rpm * 360) / 60
-                    time_unit = self.a_inc/degrees_sec * 1000 #ms
-                    next_interval = int(degrees_chunk / degrees_sec * 1000)
-                    self.feedcontrol["current"] = round(time.time() * 1000)
-                    self.feedcontrol["next"] = self.feedcontrol["current"] + next_interval
-                    cmdlist = []
-                    self.last_position = i
-                    if not self.running:
-                        break
-                if self.laser and self.laser_stop:
-                    self.running = False
-                    cmd_buffer.append("S0")
-                    self._printer.commands(["S0"])
-                if self.write_mode:
-                    self.running = False
-                    self.rosette_gcode(cmd_buffer)
-                count += 1
-        except Exception as e:
-            self._logger.error(f"Exception in job thread: {e}", exc_info=True)
-        self._logger.info("Thread ended")
-        if self.laser:
-            self._printer.commands(["S0"])
-
     def _start_geo(self):
         
         self.rock_work = []
@@ -1209,6 +970,243 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
         self.need_reset = True
         self.jobThread = threading.Thread(target=self._geometric_thread).start()
 
+    def _job_thread(self):  
+        self._logger.info("Starting job thread")
+        self._plugin_manager.send_plugin_message("latheengraver", dict(type='clear_all'))
+        self.cum_inject = {"X": 0.0, "Z" : 0.0}
+        #phase offsets applied here to the working array
+        phasecmds = []
+        pump_rad_start = 0
+        if self.pump_offset and self.pump_main["type"]:
+            #base the roll on self.a_inc
+            roll = int(self.pump_offset/self.a_inc)
+            #determine absolute value at this position from main
+            zero_pump = self.pump_main["radii"][0]
+            pump_rad_start = zero_pump - self.pump_main["radii"][roll]
+            
+            self.working_x = np.roll(self.working_x, roll)
+            phasecmds.append(f"G0 G91 X{pump_rad_start:0.4f}")
+            self._logger.debug(f"pump phase offset X value: {pump_rad_start}, phasecmds: {phasecmds}")
+
+        try:
+            bf_target = self.bf_target
+            degrees_sec = (self.rpm * 360) / 60
+            degrees_chunk = self.chunk * self.a_inc
+            loop_start = None
+            loop_end = None
+            cmdlist = []
+            cmd_buffer = []
+            #cmdlist.append("G92 A0")
+            ovality_z = 0 #this is how far we have already moved Z at any point
+            if self.laser_mode and self.laser_start:
+                lc = "M4"
+                if self.use_m3:
+                    lc="M3"
+                cmdlist.append(f"{lc} S{self.laser_base}")
+                if self.laser_delay:
+                    cmdlist.append(f"G4 P{self.laser_delay/1000}")
+                if self.laser_delay:
+                    cmdlist.append(f"G4 P{self.laser_delay/1000}")
+                self.laser = True
+            #cmdlist.append("M3 S1000")
+            if len(phasecmds) > 0:
+                cmdlist.extend(phasecmds)
+                self._logger.debug(f"Phase commands added, cmdlist is: {cmdlist}")
+            track = {"x": self.start_coords["x"], "z": self.start_coords["z"], "a": self.start_coords["a"]}
+            
+            if not self.forward:
+                self.working_angles = self.working_angles*-1
+                #reverse the spiral direction so it gets added to a moves
+                if self.curve["spiral"]:
+                    self.curve["spiral"] = self.curve["spiral"]*-1
+            count = 0
+            while self.running:
+
+                self.buffer = 0
+                degrees_sec = (self.rpm * 360) / 60
+                degrees_chunk = self.chunk * self.a_inc
+                time_unit = self.a_inc/degrees_sec * 1000 #ms
+                tms = round(time.time() * 1000)
+                if loop_start:
+                    #test for rock only
+                    #areset = count*360 + self.start_coords["a"]
+                    #cmdlist.append(f"G94 G90 G0 Z{self.start_coords['z']} A{areset}")
+                    self._logger.debug(f"loop time ms: {tms - loop_start}")
+                    self._logger.debug(f"Z-positiong at loop: {track['z']}")
+                    if self.curve["active"]:
+                        idx = self.curve["idx"]
+                        self._logger.debug(f"curve idx: {idx} curve X: {self.curve['x'][idx]} curve Z: {self.curve['z'][idx]}")
+                loop_start = tms
+                self.feedcontrol["current"] = tms
+                
+                #first chunk will be full size
+                next_interval = int(degrees_chunk / degrees_sec * 1000)  # in milliseconds
+                self.feedcontrol["next"] = self.feedcontrol["current"] + next_interval
+                current_angle = 0
+                #right now self.working is just rock, pump, mod 
+                for i in range(0, len(self.working_angles), self.chunk):
+                    with self.rpm_lock:
+                        if self.updated_rpm > 0:
+                            #self._logger.info("Updating RPM")
+                            self.rpm = self.updated_rpm
+                            self.updated_rpm = 0.0
+                            degrees_sec = (self.rpm * 360) / 60
+                            next_interval = int(degrees_chunk / degrees_sec * 1000)  
+                    feed = (360/self.a_inc) * self.rpm
+                    zchunk = self.working_z[i:i+self.chunk]
+                    achunk = self.working_angles[i:i+self.chunk]
+                    xchunk = self.working_x[i:i+self.chunk]
+                    modchunk = self.working_mod[i:i+self.chunk]
+                    curvechunk = []
+                    if self.curve["active"] and len(self.curve["diffs"]):
+                        diffs = self.curve["diffs"]
+                        dirn = self.curve["dir"]
+                        while len(curvechunk) < len(achunk):
+                            idx = self.curve["idx"]
+                            need = len(achunk) - len(curvechunk)
+                            take = diffs[idx:idx + need]
+                            curvechunk.extend(take)
+                            self.curve["idx"] = idx + len(take)
+                            if self.curve["idx"] >= len(diffs):
+                                if self.curve_spiral:
+                                    break
+                                if self.curve_recip:
+                                    self.curve["dir"] = dirn*-1
+                                    self.curve["idx"] = 0
+                                    self.curve["diffs"] = np.flip(diffs * -1)
+                                    #these are just for record keeping
+                                    self.curve["x"] = np.flip(self.curve["x"])
+                                    self.curve["z"] = np.flip(self.curve["z"])
+                                    if self.curve_stepdown and not self.inject:
+                                        self.inject = ("Z", -float(self.curve_stepdown))
+                                        self._logger.debug("Pass done, injecting step down")
+                                    continue
+                                else:
+                                    self.curve["active"] = False
+                                    break
+
+                        curvechunk = curvechunk[:len(achunk)]
+                    else:
+                        curvechunk = []
+                    chunk_distance = 0
+                    #tofix
+                    current_angle = track["a"]
+                    
+                    for c in range(0, len(achunk)):
+                        a = achunk[c]
+                        z = zchunk[c]
+                        x = xchunk[c]
+                        m = modchunk[c]
+                        track["z"] = track["z"] + z
+                        track["x"] = track["x"] + x
+                        track["a"] = track["a"] + a
+
+                        if self.b_adjust:
+                            bangle = math.radians(self.current_b - self.bref) *-1
+                            x = x*math.cos(bangle) + z*math.sin(bangle)
+                            z = -x*math.sin(bangle) + z*math.cos(bangle)
+
+                        if self.ellipse:
+                            z = z + m
+
+                        if len(curvechunk):
+                            try:
+                                z = z + curvechunk[c]
+                                x = x + (self.curve["xstep"] * self.curve["dir"])
+                                if self.curve["active"] and self.curve["spiral"]:
+                                    a = a + self.curve["spiral"] 
+                            except:
+                                self._logger.info(f"Curve step out of range must be reversing, direction is now {self.curve['dir']}")
+                        if self.use_scan:
+                            #just assume we are doing pumping
+                            zdiff = profiles.ovality_mod(self,track["x"],track["a"])
+                            tx = track["x"]
+                            ta = track["a"]
+                            delta_ov = zdiff - ovality_z
+                            z = z + delta_ov
+                            ovality_z = zdiff
+                            #self._logger.info(f"Zdiff is {zdiff} delta_ov is {delta_ov}")
+                        
+                        if self.laser_mode and self.laser:
+                            #calculate the chunk distance
+                            arc = track["z"] * math.radians(self.a_inc)
+                            chunk_distance = chunk_distance + math.sqrt(arc**2 + x**2 + z**2)
+
+                        cmdlist.append(f"G93 G91 G1 X{x:0.6f} A{a:0.6f} Z{z:0.6f} F{feed:0.1f}")
+                    
+                    if self.laser and chunk_distance and self.power_correct:
+                        #figure out scaling of power here
+                        calc_time = len(achunk) / (feed) #time in minutes to complete chunk
+                        nf = chunk_distance/calc_time #calculated feed
+                        sf = nf/self.laser_feed
+                        if sf < self.min_correct:
+                            sf = self.min_correct
+                        if sf > self.max_correct:
+                            sf = self.max_correct
+                        scaled = int(self.laser_base * sf)
+                        self._logger.debug(f"calc time: {calc_time}, nf: {nf}, sf: {sf}, scaled: {scaled}")
+                        cmdlist[0] = cmdlist[0] + f" S{scaled}"
+                    
+                    #All modifications should be PRE injection
+                    if self.inject:
+                        if not isinstance(self.inject,tuple) and self.inject.startswith("S") and self.laser_mode:
+                            m = re.search(r"S\s*=?\s*([0-9]+)", self.inject, re.IGNORECASE)
+                            if m:
+                                val = int(m.group(1))
+                                # set laser state and base power
+                                if val == 0:
+                                    self.laser = False
+                                    cmdlist.append("S0")
+                                else:
+                                    self.laser = True
+                                    self.laser_base = val
+                                    lc = "M4"
+                                    if self.use_m3:
+                                        lc="M3"
+                                    cmdlist.append(f"{lc} S{val}")
+                                    self._logger.info(f"Injected laser power command M4 S{val}, laser={'on' if self.laser else 'off'}")
+                            else:
+                                self._logger.warning(f"Unrecognized S-inject format: {self.inject}")
+                            self.inject = None
+                        else:
+                            cmdlist[-1] = self._update_injection(cmdlist[-1], self.inject)
+                            self.inject = None
+                    # Loop until we are ready to send the next chunk
+                    if not self.write_mode:
+                        tms = round(time.time() * 1000)
+                        while self.feedcontrol["next"] - tms > self.ms_threshold or self.buffer < bf_target:
+                                time.sleep(self.ms_threshold/2000)
+                                tms = round(time.time() * 1000)
+                                if not self.running:
+                                    break
+                        self._printer.commands(cmdlist)
+                        self.buffer_received = False
+                    else:
+                        cmd_buffer.extend(cmdlist)
+                    #in case RPM has changed
+                    degrees_sec = (self.rpm * 360) / 60
+                    time_unit = self.a_inc/degrees_sec * 1000 #ms
+                    next_interval = int(degrees_chunk / degrees_sec * 1000)
+                    self.feedcontrol["current"] = round(time.time() * 1000)
+                    self.feedcontrol["next"] = self.feedcontrol["current"] + next_interval
+                    cmdlist = []
+                    self.last_position = i
+                    if not self.running:
+                        break
+                if self.laser and self.laser_stop:
+                    self.running = False
+                    cmd_buffer.append("S0")
+                    self._printer.commands(["S0"])
+                if self.write_mode:
+                    self.running = False
+                    self.rosette_gcode(cmd_buffer)
+                count += 1
+        except Exception as e:
+            self._logger.error(f"Exception in job thread: {e}", exc_info=True)
+        self._logger.info("Thread ended")
+        if self.laser:
+            self._printer.commands(["S0"])
+
     def _start_job(self):
         if self.running:
             return
@@ -1259,7 +1257,9 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
             else:
                 self.curve["dir"] = 1
             if self.curve_spiral:
-                self.curve["spiral"] = self.curve_spiral / len(self.curve["diffs"])
+                self.curve["spiral"] = self.curve_spiral / len(self.curve['diffs'])
+            else:
+                self.curve["spiral"] = 0.0
 
         if self.ellipse:
             e_vals = []
