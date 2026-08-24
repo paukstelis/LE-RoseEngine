@@ -126,6 +126,7 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
         self.laser_feed = 0
         self.laser_base = 0
         self.laser_delay = 0
+        self.laser_delay = 0
         #laser settings
         self.power_correct = False
         self.max_correct = 3
@@ -164,6 +165,7 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
         self.laser_start = bool(self._settings.get(["laser_start"]))
         self.laser_stop = bool(self._settings.get(["laser_stop"]))
         self.laser_delay = int(self._settings.get(["laser_delay"]))
+        self.laser_delay = int(self._settings.get(["laser_delay"]))
         self.exp = bool(self._settings.get(["exp"]))
         self.geo_cutdepth = float(self._settings.get(["geo_cutdepth"]))
         self.geo_stepdown = float(self._settings.get(["geo_stepdown"]))
@@ -176,6 +178,8 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
         self.i_feed = float(self._settings.get(["i_feed"]))
         self.curve_mm_rev = float(self._settings.get(["mm_rev"]))
         self.curve_stepdown = float(self._settings.get(["curve_stepdown"]))
+        self.curve_retract = bool(self._settings.get(["curve_retract"]))
+        self.curve_retract_extra = float(self._settings.get(["curve_retract_extra"]))
         self.curve_retract = bool(self._settings.get(["curve_retract"]))
         self.curve_retract_extra = float(self._settings.get(["curve_retract_extra"]))
         self.show_injects = bool(self._settings.get(["show_injects"]))
@@ -212,6 +216,7 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
             laser_start=False,
             laser_stop=False,
             laser_delay=0,
+            laser_delay=0,
             max_correct=10,
             min_correct=0.0001,
             r_radius=50,
@@ -232,6 +237,8 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
             curve_stepdown=0.0,
             curve_retract=False,
             curve_retract_extra=0.0,
+            curve_retract=False,
+            curve_retract_extra=0.0,
             show_injects=True
             )
     
@@ -245,6 +252,7 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
         self.initialize()
 
     def get_extension_tree(self, *args, **kwargs):
+        return {'model': {'png': ["png", "dxf", "jpg", "jpeg", "gif", "txt", "stl", "svg", "json", "clr"]}}
         return {'model': {'png': ["png", "dxf", "jpg", "jpeg", "gif", "txt", "stl", "svg", "json", "clr"]}}
 
     def get_assets(self):
@@ -295,6 +303,7 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
         return math.hypot(x - cx, y - cy)
 
     def load_curve(self, SVG):
+        
         
         profiles.convert_svg(self, SVG)
         self.curve["active"] = True
@@ -610,6 +619,17 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
                 self._logger.error(f"Failed to read/parse DXF file {filename}: {e}", exc_info=True)
                 raise
         
+        
+        if ext == ".dxf":
+            try:
+                path, attributes = profiles.dxf_to_path(filename)
+                path = path[0]
+                center = None  # Could add DXF center detection if needed
+                angles, radii = self.resample_path_to_polar(path, center)
+            except Exception as e:
+                self._logger.error(f"Failed to read/parse DXF file {filename}: {e}", exc_info=True)
+                raise
+        
         if ext == ".svg":
             paths, attributes = svg2paths(filename)
             path = paths[0]  # assume single path
@@ -731,6 +751,8 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
                 if self.use_m3:
                     lc="M3"
                 cmdlist.append(f"{lc} S{self.laser_base}")
+                if self.laser_delay:
+                    cmdlist.append(f"G4 P{self.laser_delay/1000}")
                 if self.laser_delay:
                     cmdlist.append(f"G4 P{self.laser_delay/1000}")
                 self.laser = True
@@ -890,6 +912,8 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
                 if self.use_m3:
                     lc="M3"
                 cmdlist.append(f"{lc} S{self.laser_base}")
+                if self.laser_delay:
+                    cmdlist.append(f"G4 P{self.laser_delay/1000}")
                 if self.laser_delay:
                     cmdlist.append(f"G4 P{self.laser_delay/1000}")
                 self.laser = True
@@ -1226,6 +1250,8 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
             self.curve["diffs"] = np.diff(self.curve["z"])
             self.curve["min"] = np.min(self.curve["z"])
             self.curve["max"] = np.max(self.curve["z"])
+            self.curve["min"] = np.min(self.curve["z"])
+            self.curve["max"] = np.max(self.curve["z"])
             self._logger.debug(self.curve["diffs"])
             if self.curve_dir == -1:
                 self.curve["diffs"] = np.flip(self.curve["diffs"]*-1)
@@ -1284,7 +1310,20 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
         gcode.append(f"G92 A{theA}")
         return_gcode.append(f"G92 A{theA}")
         #starting position
+        #starting position
         x,z,a = self.start_coords["x"], self.start_coords["z"], self.start_coords["a"]
+        #current position
+        cx,cz,ca = self.current_x, self.current_z, self.current_a
+        #difference
+        dx,dz = x+cx, z+cz
+        #handle curvilinear
+        retract = ""
+        if self.curve_retract and len(self.curve["diffs"]):
+            #get Z difference from start relative to curvilinear
+            curve_z_retract = self.curve["max"] - dz + self.curve_retract_extra
+            #retract is relative...
+            retract = f"G94 G91 G0 Z{curve_z_retract}"
+
         #current position
         cx,cz,ca = self.current_x, self.current_z, self.current_a
         #difference
@@ -1306,9 +1345,12 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
 
         if self.reset_priority == "X" or self.reset_priority == "CURVE":
             gcode.append(retract)
+        if self.reset_priority == "X" or self.reset_priority == "CURVE":
+            gcode.append(retract)
             gcode.append(x_return)
             gcode.append(z_return)
             gcode.append(a_return)
+            return_gcode.append(retract)
             return_gcode.append(retract)
             return_gcode.append(x_gcode)
             return_gcode.append(z_return)
@@ -1316,15 +1358,18 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
 
         if self.reset_priority == "Z":
             gcode.append(retract)
+            gcode.append(retract)
             gcode.append(z_return)
             gcode.append(x_return)
             gcode.append(a_return)
+            return_gcode.append(retract)
             return_gcode.append(retract)
             return_gcode.append(z_gcode)
             return_gcode.append(x_return)
             return_gcode.append(a_gcode)
            
         if self.reset_priority == "none":
+            gcode.append(retract)
             gcode.append(retract)
             gcode.append(f"G94 G90 G0 Z{z} X{x}")
             gcode.append(f"G0 A{a}")
@@ -1734,7 +1779,9 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
         if command == "curve":
             path = data["path"]
             
+            
             if path is not "None":
+                #is it SVG or DXF?
                 #is it SVG or DXF?
                 self.load_curve(path)
                 json_figure = self._plot_curve(lc="black")
