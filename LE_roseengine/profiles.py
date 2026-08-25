@@ -253,18 +253,100 @@ def ovality_mod(_plugin, x, a_deg):
     else:
         return adiff
 
+def apply_transform(path, transform_str, logger=None):
+    if not transform_str:
+        return path
+    
+    import re
+    matrix_match = re.search(r'matrix\(([-\d.,\s]+)\)', transform_str)
+    if not matrix_match:
+        if logger:
+            logger.warning(f"Unsupported transform format: {transform_str}")
+        return path
+    
+    values = [float(x.strip()) for x in matrix_match.group(1).split(',')]
+    if len(values) != 6:
+        if logger:
+            logger.warning(f"Invalid matrix values: {values}")
+        return path
+    
+    a, b, c, d, e, f = values
+    
+    # Apply affine transform to each segment
+    transformed_segments = []
+    for seg in path:
+        start = seg.start
+        end = seg.end
+        
+        # Transform: x' = ax + cy + e, y' = bx + dy + f
+        new_start = complex(
+            a * start.real + c * start.imag + e,
+            b * start.real + d * start.imag + f
+        )
+        new_end = complex(
+            a * end.real + c * end.imag + e,
+            b * end.real + d * end.imag + f
+        )
+        
+        if isinstance(seg, Line):
+            transformed_segments.append(Line(new_start, new_end))
+        
+        elif isinstance(seg, Arc):
+            # Scale radius by transform scale factors
+            scale_x = np.sqrt(a**2 + b**2)
+            scale_y = np.sqrt(c**2 + d**2)
+            new_radius = complex(
+                seg.radius.real * scale_x,
+                seg.radius.imag * scale_y
+            )
+            transformed_segments.append(Arc(
+                start=new_start,
+                radius=new_radius,
+                rotation=seg.rotation,
+                large_arc=seg.large_arc,
+                sweep=seg.sweep,
+                end=new_end
+            ))
+        
+        elif isinstance(seg, CubicBezier):
+            # Transform control points
+            control1 = seg.control1
+            control2 = seg.control2
+            new_control1 = complex(
+                a * control1.real + c * control1.imag + e,
+                b * control1.real + d * control1.imag + f
+            )
+            new_control2 = complex(
+                a * control2.real + c * control2.imag + e,
+                b * control2.real + d * control2.imag + f
+            )
+            transformed_segments.append(CubicBezier(
+                new_start, new_control1, new_control2, new_end
+            ))
+        
+        else:
+            # Fallback for unsupported segment types
+            transformed_segments.append(seg)
+    
+    if logger:
+        logger.info(f"Applied matrix transform: {values}")
+    
+    return Path(*transformed_segments)
+
+
 def convert_svg(_plugin, SVG_FILE):
     folder = _plugin._settings.getBaseFolder("uploads")
     filename = f"{folder}/{SVG_FILE}"
-    #seemes easist to do dxf check here
     _plugin._logger.info(filename)
     ext = os.path.splitext(SVG_FILE)[1].lower()
     _plugin._logger.info(f"Got curve path {SVG_FILE} with ext {ext}")
+    
     if ext == ".dxf":
         paths, attributes = dxf_to_path(filename)
         _plugin._logger.info(paths)
     else:
         paths, attributes = svg2paths(filename)
+    
     if not paths:
         raise ValueError("No paths in SVG")
 
@@ -273,6 +355,12 @@ def convert_svg(_plugin, SVG_FILE):
 
     for path, attr in zip(paths, attributes):
         pid = attr.get("id", "").lower()
+        
+        # Apply transform if present
+        transform = attr.get("transform", "")
+        if transform:
+            path = apply_transform(path, transform, _plugin._logger)
+        
         if pid == "axis":
             axis_path = path
         else:
@@ -280,8 +368,8 @@ def convert_svg(_plugin, SVG_FILE):
 
     if profile_path is None:
         raise ValueError("No profile path found in SVG")
+    
     xmin, xmax, ymin, ymax = profile_path.bbox()
-    #total x distance in mm
     xdist = abs(xmax - xmin)
     zdist = abs(ymax - ymin)
     samples_per_rev = max(1, int(round(360 / _plugin.a_inc)))
@@ -305,7 +393,7 @@ def convert_svg(_plugin, SVG_FILE):
     _plugin.curve["xstep"] = mm_per_step
     _plugin.curve["xdist"] = xdist
     _plugin.curve["zdist"] = zdist
-    _plugin.curve["x"] = sample_positions #probably only need to store this for coordinate case...
+    _plugin.curve["x"] = sample_positions
     _plugin.curve["z"] = curve_z
     _plugin.curve["length"] = xdist
     _plugin._logger.debug(_plugin.curve)
