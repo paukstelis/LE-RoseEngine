@@ -12,3 +12,106 @@
 #rock_area, #pump_area {
     flex: 1;
 }
+
+.needs-reset {
+    outline: 2px solid #F44336 !important;
+    box-shadow: 0 0 6px 2px rgba(244, 67, 54, 0.6) !important;
+}
+
+/* label + input/select in a horizontal row */
+.re-field {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 6px;
+}
+.re-field > label {
+    min-width: 145px;
+    margin-bottom: 0;
+    font-weight: normal;
+}
+.re-field > select,
+.re-field > input[type="number"] {
+    flex: 1;
+    min-width: 0;
+}
+
+/* checkbox + label in a horizontal row */
+.re-checkbox {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-bottom: 6px;
+}
+.re-checkbox > label {
+    margin-bottom: 0;
+    font-weight: normal;
+    cursor: pointer;
+}
+
+/* range slider with label/value above */
+.re-slider-group {
+    margin-bottom: 8px;
+}
+.re-slider-group > label {
+    display: block;
+    margin-bottom: 2px;
+}
+.re-slider-group > input[type="range"] {
+    width: 100%;
+    display: block;
+}
+
+/* Geometric Chuck stage row — four inputs share space equally */
+.geo-stage-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-bottom: 6px;
+}
+.geo-stage-row > label {
+    min-width: 30px;
+    margin-bottom: 0;
+    font-weight: normal;
+}
+.geo-stage-row > input[type="number"] {
+    flex: 1;
+    min-width: 60px;
+}
+
+/* Two-column sub-layout inside full-width panels */
+.geo-columns {
+    display: flex;
+    gap: 24px;
+    margin-top: 6px;
+}
+.geo-columns > .geo-col {
+    flex: 1;
+    min-width: 0;
+}
+
+/* Subtle bordered panel for full-width span12 sections */
+.re-panel {
+    border: 1px solid rgba(0, 0, 0, 0.13);
+    border-radius: 6px;
+    padding: 10px 16px 12px;
+    margin-bottom: 12px;
+    background: rgba(0, 0, 0, 0.015);
+}
+.re-panel > details > summary {
+    font-weight: bold;
+}
+
+details {
+    margin-bottom: 8px;
+}
+details > summary {
+    cursor: pointer;
+    margin-bottom: 4px;
+}
+
+/* Centered Clear button row */
+.re-clear {
+    text-align: center;
+    padding: 8px 0 4px;
+}
