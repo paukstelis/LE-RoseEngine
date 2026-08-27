@@ -54,9 +54,8 @@ $(function() {
         self.radial_depth = ko.observable(0.0);
         self.target_radius = ko.observable(0.0);
 
-        //Profiles
-        //self.pump_profile = ko.observable()
-        //self.mm_rev = ko.observable(1.0);
+        self.mm_rev = ko.observable(1.0);
+        self.curve_stepdown = ko.observable(0.0);
         self.curvilinear = ko.observable(false);
         self.clutch = ko.observable(true);
         self.curve_dir = ko.observable(1);
@@ -302,6 +301,13 @@ $(function() {
             self.r_stage = self.settings.r_stage();
             self.r_phase = self.settings.r_phase();
             self.r_phase_v = self.settings.r_phase_v();
+
+            self.mm_rev = self.settings.mm_rev();
+            self.curve_stepdown = self.settings.curve_stepdown();
+            self.curve_retract = self.settings.curve_retract();
+            self.curve_retract_extra = self.settings.curve_retract_extra();
+            console.log("SETTINGS")
+            console.log(self.mm_rev);
             //self.mm_rev = self.settings.mm_rev();
 
             self.exp = self.settings.exp();
@@ -514,87 +520,6 @@ $(function() {
             return false;
         };
 
-        self.createPolarPlot  = function(type,rosette_info) {
-            var radii = null;
-            var theta = null;
-            var color = null;
-            var area = null;
-            //console.log(rosette_info);
-            var maxrad = isNaN(parseFloat(rosette_info.max))
-                ? rosette_info.max
-                : "r max=" + parseFloat(rosette_info.max).toFixed(2);
-            var minrad = isNaN(parseFloat(rosette_info.min))
-                ? rosette_info.min
-                : "r min=" + parseFloat(rosette_info.min).toFixed(2);
-            if (type === "rock") {
-                radii = self.radii_rock;
-                theta = self.theta_rock;
-                color = 'blue';
-                area = 'rockarea';
-            }
-            
-            if (type === "pump") {
-                radii = self.radii_pump;
-                theta = self.theta_pump;
-                color = 'green';
-                area = 'pumparea';
-            }
-            
-            var trace = {
-                type: 'scatterpolar',
-                theta: theta,
-                r: radii,
-                mode: 'lines+markers',
-                name: 'Rosette',
-                line: {
-                    color: color,
-                    width: 2
-                },
-                marker: {
-                    size: 2,
-                }
-
-            };
-
-            var layout = {
-                margin: {
-                l: 30,
-                r: 30,
-                b: 10,
-                t: 40,
-                pad: 4
-                },
-                title: {
-                    text: maxrad+'<br>'+minrad,
-                    font: {
-                        size: 12
-                    },
-                },
-                polar: {
-
-                    radialaxis: {
-                      visible: false,
-                      autorange: true,
-                      showline: false, // Hides the axis line
-                      zeroline: false,
-                      type: "linear"
-                    },
-                    angularaxis: {
-                      showline: false, // Hides the axis line
-                      zeroline: false,
-                      rotation: 180,
-                      direction: "clockwise",
-                      type: "linear"
-                    }
-                },
-
-            };
-
-            //Make a plot
-            Plotly.newPlot(area,[trace], layout,{displayModeBar: false});
-
-        };
-
         self.onEventPLUGIN_LATHEENGRAVER_SEND_LASER = function(payload) {
             console.log("Got laser event");
         };
@@ -689,6 +614,7 @@ $(function() {
         self.load_curve = function (filePath) {
             var data = {
                 path: filePath,
+                mm_rev: self.mm_rev,
             }
 
             OctoPrint.simpleApiCommand("roseengine", "curve", data)
@@ -952,6 +878,10 @@ $(function() {
                 curve_dir: self.curve_dir(),
                 recip: self.recip(),
                 helical: self.helical(),
+                curve_retract: self.curve_retract(),
+                mm_rev: self.mm_rev(),
+                curve_retract_extra: self.curve_retract_extra(),
+                curve_stepdown: self.curve_stepdown(),
                
 
             };

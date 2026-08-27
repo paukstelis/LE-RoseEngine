@@ -165,7 +165,6 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
         self.laser_start = bool(self._settings.get(["laser_start"]))
         self.laser_stop = bool(self._settings.get(["laser_stop"]))
         self.laser_delay = int(self._settings.get(["laser_delay"]))
-        self.laser_delay = int(self._settings.get(["laser_delay"]))
         self.exp = bool(self._settings.get(["exp"]))
         self.geo_cutdepth = float(self._settings.get(["geo_cutdepth"]))
         self.geo_stepdown = float(self._settings.get(["geo_stepdown"]))
@@ -176,10 +175,9 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
         self.axis_rules = self._settings.get(["axis_rules"])
         self.inch = self._settings.get(["inch"])
         self.i_feed = float(self._settings.get(["i_feed"]))
+        #remove these so a reload won't overwrite...but where to get current settings? write a json?
         self.curve_mm_rev = float(self._settings.get(["mm_rev"]))
         self.curve_stepdown = float(self._settings.get(["curve_stepdown"]))
-        self.curve_retract = bool(self._settings.get(["curve_retract"]))
-        self.curve_retract_extra = float(self._settings.get(["curve_retract_extra"]))
         self.curve_retract = bool(self._settings.get(["curve_retract"]))
         self.curve_retract_extra = float(self._settings.get(["curve_retract_extra"]))
         self.show_injects = bool(self._settings.get(["show_injects"]))
@@ -236,7 +234,8 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
             curve_stepdown=0.0,
             curve_retract=False,
             curve_retract_extra=0.0,
-            show_injects=True
+            show_injects=True,
+            last_run = []
             )
     
     def get_template_configs(self):
@@ -249,7 +248,6 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
         self.initialize()
 
     def get_extension_tree(self, *args, **kwargs):
-        return {'model': {'png': ["png", "dxf", "jpg", "jpeg", "gif", "txt", "stl", "svg", "json", "clr"]}}
         return {'model': {'png': ["png", "dxf", "jpg", "jpeg", "gif", "txt", "stl", "svg", "json", "clr"]}}
 
     def get_assets(self):
@@ -1471,7 +1469,6 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
         )
 
         return fig.to_plotly_json()
-        self._logger.debug("plotting curve as pump")
     
     def geo_gcode(self, radii, angles):
         self.gcode_geo = False
@@ -1778,11 +1775,9 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
 
         if command == "curve":
             path = data["path"]
-            
+            self.curve_mm_rev = float(data["mm_rev"])
             
             if path is not "None":
-                #is it SVG or DXF?
-                #is it SVG or DXF?
                 self.load_curve(path)
                 json_figure = self._plot_curve(lc="black")
                 returndata = dict(type="curve", graph=json_figure)
@@ -1886,6 +1881,10 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
             self.curve_dir = int(data["curve_dir"])
             self.curve_recip = bool(data["recip"]) 
             self.curve_spiral = float(data["helical"])
+            self.curve_mm_rev = float(data["mm_rev"])
+            self.curve_retract = float(data["curve_retract"])
+            self.curve_retract_extra = float(data["curve_retract_extra"])
+            self.curve_stepdown = float(data["curve_stepdown"])
             self._logger.info("ready to start job")
             if float(data["e_ratio"]) > 1.0 and not self.rock_main["type"] == "geometric":
                 rad = float(data["e_rad"])
