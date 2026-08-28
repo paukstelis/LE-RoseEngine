@@ -298,8 +298,6 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
         return math.hypot(x - cx, y - cy)
 
     def load_curve(self, SVG):
-        
-        
         profiles.convert_svg(self, SVG)
         self.curve["active"] = True
 
@@ -340,8 +338,6 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
                 self._logger.debug("Added stage")
 
         periods = self.geo.required_periods()
-        #if periods > 30:
-        #    periods  = 30
         self._logger.debug(f"Periods: {periods}")
         t, angles, radii = self.geo.generate_polar_path(num_points=self.geo_points, t_range=(0, 2*np.pi * periods))
         avg_a_inc = np.mean(np.abs(angles))
@@ -613,18 +609,7 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
             except Exception as e:
                 self._logger.error(f"Failed to read/parse DXF file {filename}: {e}", exc_info=True)
                 raise
-        
-        
-        if ext == ".dxf":
-            try:
-                path, attributes = profiles.dxf_to_path(filename)
-                path = path[0]
-                center = None  # Could add DXF center detection if needed
-                angles, radii = self.resample_path_to_polar(path, center)
-            except Exception as e:
-                self._logger.error(f"Failed to read/parse DXF file {filename}: {e}", exc_info=True)
-                raise
-        
+               
         if ext == ".svg":
             paths, attributes = svg2paths(filename)
             path = paths[0]  # assume single path
@@ -1003,8 +988,6 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
                 cmdlist.append(f"{lc} S{self.laser_base}")
                 if self.laser_delay:
                     cmdlist.append(f"G4 P{self.laser_delay/1000}")
-                if self.laser_delay:
-                    cmdlist.append(f"G4 P{self.laser_delay/1000}")
                 self.laser = True
             #cmdlist.append("M3 S1000")
             if len(phasecmds) > 0:
@@ -1270,9 +1253,6 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
         else:
             mod_array = np.zeros_like(working_z)
         
-        #self.working = list(zip_longest(self.rock_work, self.pump_work, mod_array, fillvalue=0))
-        #self.working = np.array(self.working)
-        #to get rock+pump working correctly, need to check if rock and pump angle sets are the same, if not resample pump
         self.working_x = working_x
         self.working_z = working_z
         self.working_angles = working_angles
@@ -1892,17 +1872,17 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
                 self.ellipse = {"a" : rad, "ratio" : ratio }
             else:
                 self.ellipse = None
-            if self.pump_profile:
-                if self.pump_profile != "None":
-                    profiles.createsplines(self, self.pump_profile)
-                    self.use_scan = True
-                    self._logger.info(self.spline)
-                    self._logger.info(self.a_spline)
+
+            #Put all the current data to a setting, last_run
+            
+            self._settings.set(["last_run"], data)
+            self._logger.debug(self._settings.get(["last_run"]))
             self._start_job()
             return
 
         if command == "stop_job":
             self._logger.info("stopping job")
+            self._settings.set(["last_run"],[])
             self._stop_job()
             return
 

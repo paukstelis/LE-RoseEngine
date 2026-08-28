@@ -306,9 +306,6 @@ $(function() {
             self.curve_stepdown = self.settings.curve_stepdown();
             self.curve_retract = self.settings.curve_retract();
             self.curve_retract_extra = self.settings.curve_retract_extra();
-            console.log("SETTINGS")
-            console.log(self.mm_rev);
-            //self.mm_rev = self.settings.mm_rev();
 
             self.exp = self.settings.exp();
             //console.log(self.exp_feature)
@@ -878,10 +875,10 @@ $(function() {
                 curve_dir: self.curve_dir(),
                 recip: self.recip(),
                 helical: self.helical(),
-                curve_retract: self.curve_retract(),
-                mm_rev: self.mm_rev(),
-                curve_retract_extra: self.curve_retract_extra(),
-                curve_stepdown: self.curve_stepdown(),
+                curve_retract: self.curve_retract,
+                mm_rev: self.mm_rev,
+                curve_retract_extra: self.curve_retract_extra,
+                curve_stepdown: self.curve_stepdown,
                
 
             };
