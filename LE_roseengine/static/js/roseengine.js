@@ -1,7 +1,7 @@
 /*
  * View model for LE-RoseEngine
  *
-* Author: Paul Paukstelis
+ * Author: Paul Paukstelis
  * License: AGPLv3
  */
 $(function() {
@@ -9,7 +9,7 @@ $(function() {
         var self = this;
         self.global_settings = parameters[0];
         self.files = parameters[1];
-        self.available = ko.observable(true); //Can we interact with this plugin
+        self.available = ko.observable(true);
         self.running = ko.observable(false);
         self.is_printing = ko.observable(false);
         self.is_operational = ko.observable(false);
@@ -62,12 +62,18 @@ $(function() {
         self.recip = ko.observable(true);
         self.helical = ko.observable(0.0);
 
+        self.curve_retract = ko.observable(0.0);
+        self.curve_retract_extra = ko.observable(0.0);
+        self.r_radius = 0;
+        self.r_stage = 0;
+        self.r_phase = false;
+        self.r_phase_v = 0;
+
         //Recording
         self.recording  = ko.observable(false);
-        self.lines = ko.observable(0); //number of lines written/stored
+        self.lines = ko.observable(0);
         self.relative_return = ko.observable(false);
         self.wm = false;
-        //self.axis_rules = ko.observableArray([]);
 
         //laser
         self.laser_base = ko.observable(200);
@@ -85,11 +91,9 @@ $(function() {
             OctoPrint.files.listForLocation("local/scans", false)
                 .done(function(data) {
                     var scans = data.children || [];
-                    // keep only files whose name starts with "X"
                     scans = scans.filter(function(f) {
                         return typeof f.name === "string" && f.name.startsWith("X");
                     });
-                    //self.scans = scans;
                     populateFileSelector(scans, "#scan_pump_select", "machinecode");
                 })
                 .fail(function() {
@@ -100,13 +104,10 @@ $(function() {
         self.fetchCurveFiles = function() {
             OctoPrint.files.listForLocation("local/scans", false)
                 .done(function(data) {
-                    //self.curvilinear(false);
                     var scans = data.children || [];
-                    // keep only files whose name ends with svg or dxf
                     scans = scans.filter(function(f) {
                         return typeof f.name === "string" && (f.name.endsWith("svg") || f.name.endsWith("dxf"));
                     });
-                    //self.scans = scans;
                     populateFileSelector(scans, "#curve_select", "machinecode");
                 })
                 .fail(function() {
@@ -118,7 +119,6 @@ $(function() {
             OctoPrint.files.listForLocation("local/rosette", false)
                 .done(function(data) {
                     var rosettes = data.children;
-                    //console.log(rosettes);
                     rosettes.sort((a,b) => { return a.name.localeCompare(b.name) });
                     self.rosettes = rosettes;
                     populateFileSelector(rosettes, "#rock_file_select", "machinecode");
@@ -137,21 +137,17 @@ $(function() {
                 var option = $("<option>")
                     .text(file.display)
                     .attr("value", file.name)
-                    .attr("download",file.refs.download)
-                    .attr("path",file.path)
+                    .attr("download", file.refs.download)
+                    .attr("path", file.path)
                     .attr("index", i);
                 fileSelector.append(option);
             });
         }
 
         self.fetchSavedGeos = function() {
-            // Use OctoPrint API to list files in the uploads/rosette location,
-            // then download the saved_geos.json file via its provided download ref.
             OctoPrint.files.listForLocation("local/rosette", false)
                 .done(function(data) {
                     var children = data && data.children ? data.children : [];
-                    // look for the JSON file we save to
-                    //console.log(children);
                     var savedFile = children.find(function(f) {
                         return f.name === "saved_geos.json";
                     });
@@ -181,8 +177,6 @@ $(function() {
                                 sel.append($("<option>").text("Select saved geometric").attr("value",""));
                                 data.forEach(function(entry, i) {
                                     var label = entry.timestamp ? entry.timestamp : ("entry " + i);
-                                    //console.log(label);
-                                    if (entry.type) label = label;
                                     sel.append($("<option>").text(label).attr("value", i));
                                 });
                             }
@@ -198,8 +192,6 @@ $(function() {
                 });
         };
 
-        
-
         self.loadSavedGeo = function(index) {
             var idx = parseInt(index, 10);
             if (isNaN(idx)) return;
@@ -209,15 +201,12 @@ $(function() {
                 return;
             }
 
-            // Populate KO observables so the user can see values
             var numStages = entry.stages.length;
             try {
-                // update geo_stages observable if present
                 if (ko.isObservable(self.geo_stages)) {
                     self.geo_stages(numStages);
                 }
 
-                // ensure stages array has the correct shape
                 var current = self.stages() || [];
                 if (current.length !== numStages) {
                     var stagesArr = [];
@@ -227,12 +216,11 @@ $(function() {
                             radius: ko.observable(entry.stages[i].radius || 0),
                             p: ko.observable(entry.stages[i].p || 0),
                             q: ko.observable(entry.stages[i].q || 1),
-                            phase: ko.observable(entry.stages[i].phase || 0) // degrees
+                            phase: ko.observable(entry.stages[i].phase || 0)
                         });
                     }
                     self.stages(stagesArr);
                 } else {
-                    // reuse existing observables, just set values
                     for (var j = 0; j < numStages; j++) {
                         var src = entry.stages[j];
                         var tgt = current[j];
@@ -241,16 +229,13 @@ $(function() {
                         if (tgt.q && ko.isObservable(tgt.q)) tgt.q(src.q || 1);
                         if (tgt.phase && ko.isObservable(tgt.phase)) tgt.phase(src.phase || 0);
                     }
-                    // push updated array back to observableArray to notify bindings
                     self.stages.valueHasMutated();
                 }
 
-                // populate samples / points observable if present
                 if (entry.samples && ko.isObservable(self.geo_points)) {
                     self.geo_points(entry.samples);
                 }
 
-                // set select UI to chosen index if exists
                 var sel = $("#saved_geo_select");
                 if (sel.length) {
                     sel.val(idx);
@@ -260,7 +245,6 @@ $(function() {
                 console.error("Failed to populate KO values from saved geo:", err);
             }
 
-            // Optionally, send the geometric command to generate the pattern immediately
             var stages = entry.stages.map(function(st) {
                 return {
                     id: undefined,
@@ -284,33 +268,34 @@ $(function() {
             self.settings = self.global_settings.settings.plugins.roseengine;
             self.is_printing(self.global_settings.settings.plugins.latheengraver.is_printing());
             self.is_operational(self.global_settings.settings.plugins.latheengraver.is_operational());
-            //console.log(self.settings);
+
             self.pump_profile = "None";
             self.curve_profile = "None";
             self.fetchSavedGeos();
-
             self.fetchProfileFiles();
             self.fetchCurveFiles();
             self.fetchRosetteFiles();
 
-            self.a_inc = self.settings.a_inc();
-            self.geo_stages = self.settings.geo_stages();
-            self.geo_points = self.settings.geo_points();
-            self.relative_return = self.settings.relative_return();
+            // FIX: Use self.X(value) to SET an observable's value.
+            //      Using self.X = value replaces the observable with a plain value,
+            //      breaking all KO bindings and any code that calls self.X().
+            self.a_inc(self.settings.a_inc());
+            self.geo_stages(self.settings.geo_stages());
+            self.geo_points(self.settings.geo_points());
+            self.relative_return(self.settings.relative_return());
+            self.mm_rev(self.settings.mm_rev());
+            self.curve_stepdown(self.settings.curve_stepdown());
+            self.curve_retract(self.settings.curve_retract());
+            self.curve_retract_extra(self.settings.curve_retract_extra());
+            self.exp(self.settings.exp());
+
+            // These are intentionally plain properties (not observables)
             self.r_radius = self.settings.r_radius();
             self.r_stage = self.settings.r_stage();
             self.r_phase = self.settings.r_phase();
             self.r_phase_v = self.settings.r_phase_v();
-
-            self.mm_rev = self.settings.mm_rev();
-            self.curve_stepdown = self.settings.curve_stepdown();
-            self.curve_retract = self.settings.curve_retract();
-            self.curve_retract_extra = self.settings.curve_retract_extra();
-
-            self.exp = self.settings.exp();
-            //console.log(self.exp_feature)
-
-            var numStages = parseInt(self.geo_stages, 10);
+            
+            var numStages = parseInt(self.geo_stages(), 10); // NOTE: geo_stages is an observable — call it
             var stagesArr = [];
             for (var i = 0; i < numStages; i++) {
                 stagesArr.push({
@@ -322,12 +307,9 @@ $(function() {
                 });
             }
             self.stages(stagesArr);
-            //console.log("binding self.a_inc")
-            //console.log(self.a_inc);
-            var po = $('#po_span');
-            var po_slider = $('#pump_offset');
-            po_slider.attr("step", self.a_inc);
 
+            var po_slider = $('#pump_offset');
+            po_slider.attr("step", self.a_inc()); // call the observable
         };
 
         self.fromCurrentData = function(data) {
@@ -339,28 +321,24 @@ $(function() {
         };
 
         self._processStateData = function(data) {
-            
             self.is_printing(data.flags.printing);
             self.is_operational(data.flags.operational);
-            //self.isLoading(data.flags.loading);
-            
+
             if (self.is_printing() && !self.running()) {
-              self.available(false);
+                self.available(false);
             }
 
-            if(!self.is_printing() || self.running()) {
+            if (!self.is_printing() || self.running()) {
                 self.available(true);
             }
-
-            //console.log(self.available());
         };
 
         $("#saved_geo_select").on("change", function() {
-                var val = $(this).val();
-                if (val !== "") {
-                    self.loadSavedGeo(val);
-                }
-            });
+            var val = $(this).val();
+            if (val !== "") {
+                self.loadSavedGeo(val);
+            }
+        });
 
         $("#saved_geo_select").on("contextmenu", function(e) {
             e.preventDefault();
@@ -385,77 +363,54 @@ $(function() {
         $("#scan_pump_select").on("change", function () {
             var filePath = $("#scan_pump_select option:selected").attr("path");
             var val = $("#scan_pump_select option:selected").attr("value");
-            if (!filePath) {
-                val = "none";
-            }
-            if (val === "none") {
-                filePath = "None";
-            }
-
+            if (!filePath) { val = "none"; }
+            if (val === "none") { filePath = "None"; }
             self.pump_profile = filePath;
             console.log(self.pump_profile);
-            
         });
 
         $("#curve_select").on("change", function () {
             self.curvilinear(false);
             var filePath = $("#curve_select option:selected").attr("path");
             var val = $("#curve_select option:selected").attr("value");
-            if (!filePath) {
-                val = "none";
-            }
-            if (val === "none") {
-                filePath = "None";
-            }
-
+            if (!filePath) { val = "none"; }
+            if (val === "none") { filePath = "None"; }
             self.curve_profile = filePath;
             console.log(self.curve_profile);
             if (filePath != "None") {
                 self.load_curve(filePath);
                 self.curvilinear(true);
             }
-            
         });
 
         $("#rock_file_select").on("click", function () {
             var filePath = $("#rock_file_select option:selected").attr("path");
             self.name = $("#rock_file_select option:selected").attr("value");
             if (!filePath) return;
-
-            self.load_rosette(filePath,"rock");
-            
+            self.load_rosette(filePath, "rock");
         });
 
         $("#pump_file_select").on("click", function () {
             var filePath = $("#pump_file_select option:selected").attr("path");
             self.name = $("#pump_file_select option:selected").attr("value");
             if (!filePath) return;
-
-            self.load_rosette(filePath,"pump");
-            
+            self.load_rosette(filePath, "pump");
         });
 
         $("#rpm").on("change", function() {
-
             self.update_rpm();
-
         });
 
         $("#moveb").on("change", function() {
-
             self.update_rpm();
-
         });
 
         $("#rockarea").on("click", function() {
             var plotDiv = document.getElementById('rockarea');
             var plotData = plotDiv.data;
             var plotLayout = plotDiv.layout;
-
             var win = window.open("", "LargeRock", "width=1000,height=800");
-            // Wait for the window to be ready
             win.document.body.innerHTML = '<div id="largeplot" style="width:900px;height:700px;"></div>';
-            // Add the script tag for Plotly
             var script = win.document.createElement('script');
             script.src = "/plugin/roseengine/static/js/plotly-latest.min.js";
             script.onload = function() {
@@ -468,11 +423,8 @@ $(function() {
             var plotDiv = document.getElementById('pumparea');
             var plotData = plotDiv.data;
             var plotLayout = plotDiv.layout;
-
             var win = window.open("", "LargePump", "width=1000,height=800");
-            // Wait for the window to be ready
             win.document.body.innerHTML = '<div id="largeplot2" style="width:900px;height:700px;"></div>';
-            // Add the script tag for Plotly
             var script = win.document.createElement('script');
             script.src = "/plugin/roseengine/static/js/plotly-latest.min.js";
             script.onload = function() {
@@ -481,21 +433,20 @@ $(function() {
             win.document.head.appendChild(script);
         });
 
-        self.special_warning = function(a,b) {
-            var area = b+'area';
+        self.special_warning = function(a, b) {
+            var area = b + 'area';
             if (a === "off") {
-                $('#'+area).removeClass("shadow-effect");
+                $('#' + area).removeClass("shadow-effect");
+            } else {
+                $('#' + area).addClass("shadow-effect");
             }
-            else {
-                $('#'+area).addClass("shadow-effect");
-            }
-        }
-        
+        };
+
         self.distClicked = function(distance) {
             console.log(distance);
             self.dist(parseFloat(distance));
         };
-        
+
         self.distRightClicked = function(distance, event) {
             event.preventDefault();
             event.stopPropagation();
@@ -541,65 +492,48 @@ $(function() {
                 self.radii_rock = data.radii;
                 self.angles_rock = data.angles;
                 self.special = data.special;
-                var rosette_info = {
-                    max: data.maxrad,
-                    min: data.minrad,
-                };
-                
-                Plotly.newPlot('rockarea', data.graph.data, data.graph.layout,{displayModeBar: false});
+                Plotly.newPlot('rockarea', data.graph.data, data.graph.layout, {displayModeBar: false});
                 if (self.special) {
-                    self.special_warning("on","rock");
+                    self.special_warning("on", "rock");
+                } else {
+                    self.special_warning("off", "rock");
                 }
-                else { self.special_warning("off","rock"); }  
             }
 
             if (plugin == 'roseengine' && data.type == 'geo') {
                 console.log(data.graph);
-                var json_data = JSON.stringify(data.graph);
-                Plotly.newPlot('rockarea', data.graph.data, data.graph.layout,{displayModeBar: false});   
+                Plotly.newPlot('rockarea', data.graph.data, data.graph.layout, {displayModeBar: false});
             }
 
             if (plugin == 'roseengine' && data.type == 'curve') {
-                //console.log(data.graph);
-                var json_data = JSON.stringify(data.graph);
-                Plotly.newPlot('pumparea', data.graph.data, data.graph.layout,{displayModeBar: false});   
+                Plotly.newPlot('pumparea', data.graph.data, data.graph.layout, {displayModeBar: false});
             }
 
             if (plugin == 'roseengine' && data.type == 'pump') {
                 self.radii_pump = data.radii;
                 self.angles_pump = data.angles;
                 self.special = data.special;
-                var rosette_info = {
-                    max: data.maxrad,
-                    min: data.minrad,
-                };
-                Plotly.newPlot('pumparea', data.graph.data, data.graph.layout,{displayModeBar: false});
+                Plotly.newPlot('pumparea', data.graph.data, data.graph.layout, {displayModeBar: false});
                 if (self.special) {
-                    self.special_warning("on","pump");
+                    self.special_warning("on", "pump");
+                } else {
+                    self.special_warning("off", "pump");
                 }
-                else { self.special_warning("off","pump"); }
             }
 
             if (plugin == 'roseengine' && data.func == 'refresh') {
                 self.fetchProfileFiles();
                 self.fetchRosetteFiles();
                 self.fetchSavedGeos();
-                //console.log("got files");
             }
 
-            if (plugin == 'roseengine' && data.laser === false || data.laser === true ) {
-                //console.log(data);
+            if (plugin == 'roseengine' && (data.laser === false || data.laser === true)) {
                 self.laser_mode(data.laser);
-                //console.log("Laser mode set");
             }
         };
 
         self.send_error_message = function(message) {
-            var data = {
-                message: message
-            };
-
-            OctoPrint.simpleApiCommand("latheengraver", "send_error_message", data)
+            OctoPrint.simpleApiCommand("latheengraver", "send_error_message", { message: message })
                 .done(function(response) {
                     console.log("Error message sent");
                 })
@@ -608,11 +542,12 @@ $(function() {
                 });
         };
 
-        self.load_curve = function (filePath) {
+        self.load_curve = function(filePath) {
             var data = {
                 path: filePath,
-                mm_rev: self.mm_rev,
-            }
+                // FIX: self.mm_rev is an observable — unwrap it with ()
+                mm_rev: self.mm_rev(),
+            };
 
             OctoPrint.simpleApiCommand("roseengine", "curve", data)
                 .done(function(response) {
@@ -623,13 +558,12 @@ $(function() {
                 });
         };
 
-        self.toggle_clutch = function (){
+        self.toggle_clutch = function() {
             self.clutch(!self.clutch());
             self.update_rpm();
         };
 
         self.parametric_rosette = function(type) {
-            
             var data = {
                 type: type,
                 amp: self.s_amp(),
@@ -640,8 +574,8 @@ $(function() {
                 p_amp: self.p_amp(),
                 ecc_offset: self.ecc_offset(),
                 default_radius: self.default_radius(),
-            }
-            
+            };
+
             OctoPrint.simpleApiCommand("roseengine", "parametric", data)
                 .done(function(response) {
                     console.log("Parametric sent");
@@ -649,8 +583,6 @@ $(function() {
                 .fail(function() {
                     console.error("Parametric failed");
                 });
-
-
         };
 
         self.save_geo = function() {
@@ -662,36 +594,23 @@ $(function() {
                     console.error("Save failed");
                 });
         };
-        
+
         self.create_geo = function(randomize) {
             var total_radius = 0;
             var stages_data = self.stages().map(function(stage, idx) {
-                var spq = (self.r_stage*2)+1;
+                var spq = (self.r_stage * 2) + 1; // plain property, no () needed
                 if (randomize) {
                     var radius = Math.floor(Math.random() * self.r_radius) + 1;
                     var p = Math.floor(Math.random() * spq) - self.r_stage;
                     var q = Math.floor(Math.random() * spq) - self.r_stage;
+                    var phase = self.r_phase ? (Math.floor(Math.random() * self.r_phase_v) + 1) : 0;
 
-                    if (self.r_phase) {
-                        var phase = Math.floor(Math.random() * self.r_phase_v) + 1;
-                    }
-                    else {
-                        var phase = 0;
-                    }
-
-                    // Update the knockout observables so UI reflects the random values
                     stage.radius(radius);
                     stage.p(p);
                     stage.q(q);
                     stage.phase(phase);
                     total_radius += radius;
-                    return {
-                        id: stage.id,
-                        radius: radius,
-                        p: p,
-                        q: q,
-                        phase: phase
-                    };
+                    return { id: stage.id, radius: radius, p: p, q: q, phase: phase };
                 } else {
                     var r = ko.unwrap(stage.radius);
                     total_radius += (typeof r === "number" ? r : parseFloat(r) || 0);
@@ -709,15 +628,15 @@ $(function() {
             stages_data = stages_data.map(function(st, i) {
                 var scaled = Object.assign({}, st);
                 scaled.radius = parseFloat(st.radius) * scale;
-                // reflect scaled value in UI observables
                 var stageObs = self.stages()[i];
                 if (stageObs && ko.isObservable(stageObs.radius)) {
                     stageObs.radius(scaled.radius);
                 }
                 return scaled;
             });
-            //console.log(stages_data);
-            OctoPrint.simpleApiCommand("roseengine", "geometric", { stages: stages_data, samples: self.geo_points })
+
+            // FIX: self.geo_points is an observable — unwrap it with ()
+            OctoPrint.simpleApiCommand("roseengine", "geometric", { stages: stages_data, samples: self.geo_points() })
                 .done(function(response) {
                     console.log("Geometric data sent");
                 })
@@ -727,7 +646,6 @@ $(function() {
         };
 
         self.re_jog = function(dir) {
-            
             var data = {
                 direction: dir,
                 dist: self.dist(),
@@ -740,11 +658,9 @@ $(function() {
                 .fail(function() {
                     console.error("Jog failed");
                 });
-
         };
 
         self.toggle_laser = function() {
-
             OctoPrint.simpleApiCommand("roseengine", "laser")
                 .done(function(response) {
                     console.log("Laser toggle sent");
@@ -752,20 +668,17 @@ $(function() {
                 .fail(function() {
                     console.error("Laser toggle failed");
                 });
-        }
+        };
 
         self.write_mode = function() {
             self.wm = true;
             self.startjob();
             self.wm = false;
             self.files.requestData({ force: true });
-
-        }
+        };
 
         self.record = function(operation) {
-            var data = {
-                op: operation,
-            }
+            var data = { op: operation };
 
             if (operation === "start") {
                 var elem = $("#recpause");
@@ -783,24 +696,19 @@ $(function() {
                 .done(function(response) {
                     console.log("recording command sent");
                     if (data.op == 'trash' || data.op == 'stop') {
-                        self.recording = false;
+                        self.recording(false);
                     }
-                    
-                    if (data.op == 'start' || self.recording() ) {
-                        self.recording = false;
+                    if (data.op == 'start' || self.recording()) {
+                        self.recording(false);
                     }
-
-                    if (data.op == 'start' || !self.recording() ) {
-                        self.recording = true;
+                    if (data.op == 'start' || !self.recording()) {
+                        self.recording(true);
                     }
-
                 })
                 .fail(function() {
-                    console.error("Jog failed");
+                    console.error("Record command failed");
                 });
-
-
-        }
+        };
 
         self.load_rosette = function(filePath, type) {
             var data = {
@@ -818,19 +726,13 @@ $(function() {
                 .fail(function() {
                     console.error("File info not transmitted");
                 });
-
         };
 
         self.clear_rosette = function(type) {
-            
-            var data = {
-                type: type,
-            };
-
-            OctoPrint.simpleApiCommand("roseengine", "clear", data)
+            OctoPrint.simpleApiCommand("roseengine", "clear", { type: type })
                 .done(function(response) {
-                    console.log("File info transmitted");
-                    var toclear = '#'+type+'area';
+                    console.log("Clear transmitted");
+                    var toclear = '#' + type + 'area';
                     $(toclear).empty();
                 })
                 .fail(function() {
@@ -840,20 +742,15 @@ $(function() {
             self.fetchProfileFiles();
             self.fetchCurveFiles();
             self.fetchRosetteFiles();
-
         };
 
         self.geo_gcode = function() {
-
             self.gcode_geo(true);
             self.startjob();
             self.files.requestData({ force: true });
-
-        }
-
+        };
 
         self.startjob = function() {
-
             var data = {
                 rpm: self.rpm(),
                 r_amp: self.r_amp(),
@@ -875,12 +772,10 @@ $(function() {
                 curve_dir: self.curve_dir(),
                 recip: self.recip(),
                 helical: self.helical(),
-                curve_retract: self.curve_retract,
-                mm_rev: self.mm_rev,
-                curve_retract_extra: self.curve_retract_extra,
-                curve_stepdown: self.curve_stepdown,
-               
-
+                curve_retract: self.curve_retract(),
+                curve_retract_extra: self.curve_retract_extra(),
+                curve_stepdown: self.curve_stepdown(),   
+                mm_rev: self.mm_rev(),                   
             };
 
             OctoPrint.simpleApiCommand("roseengine", "start_job", data)
@@ -892,18 +787,12 @@ $(function() {
                 .fail(function() {
                     console.error("Start failed");
                 });
-            
-            self.gcode_geo(false);
 
+            self.gcode_geo(false);
         };
 
         self.stopjob = function() {
-
-            var data = {
-                stop: true
-            };
-
-            OctoPrint.simpleApiCommand("roseengine", "stop_job", data)
+            OctoPrint.simpleApiCommand("roseengine", "stop_job", { stop: true })
                 .done(function(response) {
                     console.log("Stop sent");
                     self.running(false);
@@ -911,16 +800,10 @@ $(function() {
                 .fail(function() {
                     console.error("Stop failed");
                 });
-
         };
 
         self.gotostart = function() {
-
-            var data = {
-                reset: true
-            };
-
-            OctoPrint.simpleApiCommand("roseengine", "goto_start", data)
+            OctoPrint.simpleApiCommand("roseengine", "goto_start", { reset: true })
                 .done(function(response) {
                     console.log("Reset sent");
                     self.need_reset(false);
@@ -928,10 +811,9 @@ $(function() {
                 .fail(function() {
                     console.error("Reset failed.");
                 });
-
         };
 
-        self.update_rpm = function()  {
+        self.update_rpm = function() {
             var data = {
                 rpm: self.rpm(),
                 moveb: self.moveb(),
@@ -945,73 +827,29 @@ $(function() {
                 .fail(function() {
                     console.error("Failed to update RPM");
                 });
-
-
         };
 
-        self.keyIsDown = function (data, event) {
+        self.keyIsDown = function(data, event) {
             var button = undefined;
             var visualizeClick = true;
             var simulateTouch = false;
 
             switch (event.which) {
-                case 37: // left arrow key
-                    button = $("#ctrl-xdown");
-                    simulateTouch = false;
-                    break;
-                case 38: // up arrow key
-                    button = $("#ctrl-zdown");
-                    simulateTouch = false;
-                    break;
-                case 39: // right arrow key
-                    button = $("#ctrl-xup");
-                    simulateTouch = false;
-                    break;
-                case 40: // down arrow key
-                    button = $("#ctrl-zup");
-                    simulateTouch = false;
-                    break;
-                case 50: // number 2
-                case 98: // numpad 2
-                    // Distance 0.1
-                    button = $("#ctrl-distance-0");
-                    simulateTouch = false;
-                    break;
-                case 51: // number 3
-                case 99: // numpad 3
-                    // Distance 1
-                    button = $("#ctrl-distance-1");
-                    simulateTouch = false;
-                    break;
-                case 52: // number 4
-                case 100: // numpad 4
-                    // Distance 5
-                    button = $("#ctrl-distance-2");
-                    simulateTouch = false;
-                    break;
-                case 53: // number 5
-                case 101: // numpad 5
-                    // Distance 10
-                    button = $("#ctrl-distance-3");
-                    simulateTouch = false;
-                    break;
-                case 54: // number 6
-                case 102: // numpad 6
-                    // Distance 50
-                    button = $("#ctrl-distance-4");
-                    simulateTouch = false;
-                    break;
-                case 55: // number 7
-                case 103: // numpad 7
-                    // Distance 100
-                    button = $("#ctrl-distance-5");
-                    simulateTouch = false;
-                    break;
-
+                case 37: button = $("#ctrl-xdown"); break;
+                case 38: button = $("#ctrl-zdown"); break;
+                case 39: button = $("#ctrl-xup"); break;
+                case 40: button = $("#ctrl-zup"); break;
+                case 50: case 98:  button = $("#ctrl-distance-0"); break;
+                case 51: case 99:  button = $("#ctrl-distance-1"); break;
+                case 52: case 100: button = $("#ctrl-distance-2"); break;
+                case 53: case 101: button = $("#ctrl-distance-3"); break;
+                case 54: case 102: button = $("#ctrl-distance-4"); break;
+                case 55: case 103: button = $("#ctrl-distance-5"); break;
                 default:
                     event.preventDefault();
                     return false;
             }
+
             console.log(button);
             if (button === undefined) {
                 return false;
@@ -1019,16 +857,11 @@ $(function() {
                 event.preventDefault();
                 if (visualizeClick) {
                     button.addClass("active");
-                    setTimeout(function () {
-                        button.removeClass("active");
-                    }, 150);
+                    setTimeout(function() { button.removeClass("active"); }, 150);
                 }
                 if (simulateTouch) {
-                    console.log("pushing button");
                     button.mousedown();
-                    setTimeout(function () {
-                        button.mouseup();
-                    }, 150);
+                    setTimeout(function() { button.mouseup(); }, 150);
                 } else {
                     button.click();
                 }
@@ -1038,7 +871,7 @@ $(function() {
         self.onTabChange = function(current, previous) {
             if (current === "#tab_plugin_roseengine") {
                 if (self.pump_profile === "None") { self.fetchProfileFiles(); }
-                self.fetchRosetteFiles();   // svg rosettes
+                self.fetchRosetteFiles();
                 self.fetchSavedGeos();
                 self.fetchCurveFiles();
             }
@@ -1050,25 +883,20 @@ $(function() {
                         OctoPrint.coreui.selectedTab == "#tab_plugin_roseengine" &&
                         OctoPrint.coreui.browserTabVisible && $(":focus").length == 0) {
                     self.keyIsDown(undefined, e);
-                    
                 }
             });
-            //Clear on page reload
             self.clear_rosette("pump");
             self.clear_rosette("rock");
-            //Make the rock controls the same size as pump
             var pump_height = $('pump').outerHeight();
             $('#rock').height(pump_height);
-            console.log("pump height:"+pump_height);
-
+            console.log("pump height:" + pump_height);
         });
 
     }
 
     OCTOPRINT_VIEWMODELS.push({
         construct: RoseengineViewModel,
-        dependencies: ["settingsViewModel", "filesViewModel",  "accessViewModel","loginStateViewModel",],
-        elements: [ "#tab_plugin_roseengine", ]
-
+        dependencies: ["settingsViewModel", "filesViewModel", "accessViewModel", "loginStateViewModel"],
+        elements: ["#tab_plugin_roseengine"]
     });
 });
