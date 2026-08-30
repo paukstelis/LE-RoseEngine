@@ -58,7 +58,9 @@ $(function() {
         self.curve_stepdown = ko.observable(0.0);
         self.curvilinear = ko.observable(false);
         self.clutch = ko.observable(true);
-        self.curve_dir = ko.observable(1);
+        //self.curve_dir = ko.observable(1);
+        self.curve_start = ko.observable(0);
+        self.curve_stop = ko.observable(0);
         self.recip = ko.observable(true);
         self.helical = ko.observable(0.0);
 
@@ -276,7 +278,7 @@ $(function() {
             self.fetchCurveFiles();
             self.fetchRosetteFiles();
 
-            // FIX: Use self.X(value) to SET an observable's value.
+            // REMINDER: Use self.X(value) to SET an observable's value.
             //      Using self.X = value replaces the observable with a plain value,
             //      breaking all KO bindings and any code that calls self.X().
             self.a_inc(self.settings.a_inc());
@@ -289,13 +291,12 @@ $(function() {
             self.curve_retract_extra(self.settings.curve_retract_extra());
             self.exp(self.settings.exp());
 
-            // These are intentionally plain properties (not observables)
             self.r_radius = self.settings.r_radius();
             self.r_stage = self.settings.r_stage();
             self.r_phase = self.settings.r_phase();
             self.r_phase_v = self.settings.r_phase_v();
             
-            var numStages = parseInt(self.geo_stages(), 10); // NOTE: geo_stages is an observable — call it
+            var numStages = parseInt(self.geo_stages(), 10); 
             var stagesArr = [];
             for (var i = 0; i < numStages; i++) {
                 stagesArr.push({
@@ -309,7 +310,7 @@ $(function() {
             self.stages(stagesArr);
 
             var po_slider = $('#pump_offset');
-            po_slider.attr("step", self.a_inc()); // call the observable
+            po_slider.attr("step", self.a_inc()); 
         };
 
         self.fromCurrentData = function(data) {
@@ -506,7 +507,58 @@ $(function() {
             }
 
             if (plugin == 'roseengine' && data.type == 'curve') {
-                Plotly.newPlot('pumparea', data.graph.data, data.graph.layout, {displayModeBar: false});
+                const plotDiv = document.getElementById('pumparea');
+
+                Plotly.newPlot(plotDiv, data.graph.data, data.graph.layout, {
+                    displayModeBar: false,
+                    edits: { shapePosition: true }
+                });
+
+                // Default x values from the initial shapes
+                let startX = plotDiv._fullLayout.shapes[0].x0.toFixed(1);
+                let endX   = plotDiv._fullLayout.shapes[1].x0.toFixed(1);
+
+                // --- Reuse or create label container (avoid duplicates on reload) ---
+                let labelContainer = document.getElementById('curve-marker-labels');
+                if (!labelContainer) {
+                    labelContainer = document.createElement('div');
+                    labelContainer.id = 'curve-marker-labels';
+                    labelContainer.style.cssText = 'display:flex; gap:16px; font-size:13px; margin-bottom:2px; padding-left:4px;';
+
+                    const startLabel = document.createElement('span');
+                    startLabel.id = 'curve-label-start';
+                    startLabel.style.color = 'green';
+
+                    const endLabel = document.createElement('span');
+                    endLabel.id = 'curve-label-end';
+                    endLabel.style.color = 'red';
+
+                    labelContainer.appendChild(startLabel);
+                    labelContainer.appendChild(endLabel);
+                    plotDiv.parentNode.insertBefore(labelContainer, plotDiv);
+                }
+
+                function updateLabels() {
+                    document.getElementById('curve-label-start').innerHTML = `<b>Start:</b> ${startX}`;
+                    document.getElementById('curve-label-end').innerHTML   = `<b>Stop:</b> ${endX}`;
+                    self.curve_start(startX);
+                    self.curve_stop(endX);
+                }
+
+                updateLabels();
+
+                // --- Update labels when markers are dragged ---
+                // Remove any prior listener by replacing the div's plotly binding
+                plotDiv.removeAllListeners('plotly_relayout');
+                plotDiv.on('plotly_relayout', function (eventData) {
+                    if ('shapes[0].x0' in eventData) {
+                        startX = parseFloat(eventData['shapes[0].x0']).toFixed(1);
+                    }
+                    if ('shapes[1].x0' in eventData) {
+                        endX = parseFloat(eventData['shapes[1].x0']).toFixed(1);
+                    }
+                    updateLabels();
+                });
             }
 
             if (plugin == 'roseengine' && data.type == 'pump') {
@@ -545,7 +597,6 @@ $(function() {
         self.load_curve = function(filePath) {
             var data = {
                 path: filePath,
-                // FIX: self.mm_rev is an observable — unwrap it with ()
                 mm_rev: self.mm_rev(),
             };
 
@@ -598,7 +649,7 @@ $(function() {
         self.create_geo = function(randomize) {
             var total_radius = 0;
             var stages_data = self.stages().map(function(stage, idx) {
-                var spq = (self.r_stage * 2) + 1; // plain property, no () needed
+                var spq = (self.r_stage * 2) + 1;
                 if (randomize) {
                     var radius = Math.floor(Math.random() * self.r_radius) + 1;
                     var p = Math.floor(Math.random() * spq) - self.r_stage;
@@ -769,7 +820,9 @@ $(function() {
                 pump_profile: self.pump_profile,
                 gcode_geo: self.gcode_geo(),
                 wm: self.wm,
-                curve_dir: self.curve_dir(),
+                //curve_dir: self.curve_dir(),
+                curve_start: self.curve_start(),
+                curve_stop: self.curve_stop(),
                 recip: self.recip(),
                 helical: self.helical(),
                 curve_retract: self.curve_retract(),

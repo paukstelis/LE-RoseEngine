@@ -99,7 +99,9 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
         self.curve_mm_rev = 0.0
         self.curve_recip = True
         self.curve_stepdown = 0.0
-        self.curve_dir = "l2r"
+        #self.curve_dir = "l2r"
+        self.curve_start = 0.0
+        self.curve_stop = 0.0
         self.curve_spiral = 0.0
 
         self.write_mode = False
@@ -1224,19 +1226,39 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
 
         #handle curvilinear
         if self.curve["active"] and len(self.curve["x"]):
+            #rename start and stop
+            if self.curve_start > self.curve_stop:
+                large,small = self.curve_start, self.curve_stop
+            else:
+                large,small = self.curve_stop, self.curve_start
+
+            #resample/truncate between start/stop
+            samples_per_rev = max(1, int(round(360 / self.a_inc)))
+            mm_per_step = self.curve_mm_rev / samples_per_rev
+            xdist = large-small
+            samples = int(xdist / mm_per_step)
+            sample_positions = np.arange(small,large+(mm_per_step/2), mm_per_step, dtype=float) 
+            #sample_positions = np.clip(sample_positions, small, large)
+            curve_z = self.curve["spline"](sample_positions)
+            #update X and Z
+            self.curve["x"] = sample_positions
+            self.curve["z"] = curve_z
+
             self.curve["xstep"] = self.curve_mm_rev/(360/self.a_inc)
             self.curve["idx"] = 0
             self.curve["diffs"] = np.diff(self.curve["z"])
             self.curve["min"] = np.min(self.curve["z"])
             self.curve["max"] = np.max(self.curve["z"])
-            self.curve["min"] = np.min(self.curve["z"])
-            self.curve["max"] = np.max(self.curve["z"])
-            self._logger.debug(self.curve["diffs"])
-            if self.curve_dir == -1:
-                self.curve["diffs"] = np.flip(self.curve["diffs"]*-1)
+
+            self._logger.debug(self.curve)
+
+            #reverse direction if stop is less than start
+            if self.curve_start > self.curve_stop:
                 self.curve["dir"] = -1
+                self.curve["diffs"] = np.flip(self.curve["diffs"]*-1) 
             else:
                 self.curve["dir"] = 1
+  
             if self.curve_spiral:
                 self.curve["spiral"] = self.curve_spiral / len(self.curve['diffs'])
             else:
@@ -1420,36 +1442,55 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
 
         return fig.to_plotly_json()
     
-    def _plot_curve(self,lc):
+    def _plot_curve(self, lc):
         fig = self.go.Figure()
+
+        x_vals = [round(v, 1) for v in self.curve["x"]]
+        z_vals = [round(v, 1) for v in self.curve["z"]]
+
         fig.add_trace(go.Scatter(
-            x=[round(v, 1) for v in self.curve["x"]],
-            y=[round(v, 1) for v in self.curve["z"]],
+            x=x_vals,
+            y=z_vals,
             mode='lines',
-            line_color=lc,   
+            line_color=lc,
         ))
 
+        # Default marker positions: 10% and 90% of the x range
+        x_min, x_max = min(x_vals), max(x_vals)
+        x_span = x_max - x_min
+        start_x = x_min
+        end_x   = x_max
+
+        # Tall lines (y0/y1 far beyond paper bounds) so Y-axis dragging is invisible
+        marker_line_style = dict(
+            type="line",
+            xref="x",
+            yref="paper",
+            y0=-50, y1=50,      # clips at plot edge — effectively X-only movement
+            line=dict(width=2, dash="2px,2px,2px,2px"),
+        )
+
+        fig.add_shape(**marker_line_style, x0=start_x, x1=start_x,
+                    line_color="green", name="start_marker")
+        fig.add_shape(**marker_line_style, x0=end_x,   x1=end_x,
+                    line_color="red",   name="end_marker")
+        y_min, y_max = min(z_vals), max(z_vals)
+        fig.update_xaxes(range=[x_min, x_max])
         fig.update_yaxes(
+            range=[y_max,y_min],
             scaleanchor="x",
             scaleratio=1,
-            autorange="reversed"
+            autorange="reversed",
         )
 
         fig.update_layout(
-            margin = dict(
-            l=30,
-            r=30,
-            b=10,
-            t=40,
-            pad=4
-            ),
+            margin=dict(l=30, r=30, b=10, t=40, pad=4),
             showlegend=False,
-            title=dict()
-            
+            title=dict(),
         )
 
         return fig.to_plotly_json()
-    
+
     def geo_gcode(self, radii, angles):
         self.gcode_geo = False
         gcode = []
@@ -1858,7 +1899,8 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
             self.radial_depth = float(data["radial_depth"])
             self.pump_profile = data["pump_profile"]
             self.gcode_geo = bool(data["gcode_geo"])
-            self.curve_dir = int(data["curve_dir"])
+            self.curve_start = float(data["curve_start"])
+            self.curve_stop = float(data["curve_stop"])
             self.curve_recip = bool(data["recip"]) 
             self.curve_spiral = float(data["helical"])
             self.curve_mm_rev = float(data["mm_rev"])

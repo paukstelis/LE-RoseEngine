@@ -390,6 +390,7 @@ def convert_svg(_plugin, SVG_FILE):
     sample_positions = np.arange(samples, dtype=float) * mm_per_step
     sample_positions = np.clip(sample_positions, 0.0, xdist)
     curve_z = svgspline(sample_positions)
+    _plugin.curve["spline"] = svgspline
     _plugin.curve["xstep"] = mm_per_step
     _plugin.curve["xdist"] = xdist
     _plugin.curve["zdist"] = zdist
