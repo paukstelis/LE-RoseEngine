@@ -1236,7 +1236,7 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
             samples_per_rev = max(1, int(round(360 / self.a_inc)))
             mm_per_step = self.curve_mm_rev / samples_per_rev
             xdist = large-small
-            samples = int(xdist / mm_per_step)
+            #samples = int(xdist / mm_per_step)
             sample_positions = np.arange(small,large+(mm_per_step/2), mm_per_step, dtype=float) 
             #sample_positions = np.clip(sample_positions, small, large)
             curve_z = self.curve["spline"](sample_positions)
@@ -1445,8 +1445,8 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
     def _plot_curve(self, lc):
         fig = self.go.Figure()
 
-        x_vals = [round(v, 1) for v in self.curve["x"]]
-        z_vals = [round(v, 1) for v in self.curve["z"]]
+        x_vals = self.curve["x"]
+        z_vals = self.curve["z"]
 
         fig.add_trace(go.Scatter(
             x=x_vals,

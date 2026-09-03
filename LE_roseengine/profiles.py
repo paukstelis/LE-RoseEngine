@@ -374,7 +374,8 @@ def convert_svg(_plugin, SVG_FILE):
     zdist = abs(ymax - ymin)
     samples_per_rev = max(1, int(round(360 / _plugin.a_inc)))
     mm_per_step = _plugin.curve_mm_rev / samples_per_rev
-    samples = int(xdist / mm_per_step)
+    #samples = int(xdist / mm_per_step)
+    samples = 2000
     _plugin._logger.info(f"Calculating curvilinear path samples. spr: {samples_per_rev}, mm_step: {mm_per_step}, samples: {samples}")
     t_vals = np.linspace(0.0, 1.0, samples)
     curve_pts = np.array([profile_path.point(t) for t in t_vals])
@@ -387,8 +388,8 @@ def convert_svg(_plugin, SVG_FILE):
     z_design = z_design[sort_idx]
 
     svgspline = CubicSpline(x_design, z_design)
-    sample_positions = np.arange(samples, dtype=float) * mm_per_step
-    sample_positions = np.clip(sample_positions, 0.0, xdist)
+    sample_positions = np.arange(0.0, xdist+0.025, 0.05, dtype=float)
+    #sample_positions = np.clip(sample_positions, 0.0, xdist)
     curve_z = svgspline(sample_positions)
     _plugin.curve["spline"] = svgspline
     _plugin.curve["xstep"] = mm_per_step

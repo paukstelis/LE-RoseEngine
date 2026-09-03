@@ -552,10 +552,10 @@ $(function() {
                 plotDiv.removeAllListeners('plotly_relayout');
                 plotDiv.on('plotly_relayout', function (eventData) {
                     if ('shapes[0].x0' in eventData) {
-                        startX = parseFloat(eventData['shapes[0].x0']).toFixed(1);
+                        startX = parseFloat(eventData['shapes[0].x0']).toFixed(2);
                     }
                     if ('shapes[1].x0' in eventData) {
-                        endX = parseFloat(eventData['shapes[1].x0']).toFixed(1);
+                        endX = parseFloat(eventData['shapes[1].x0']).toFixed(2);
                     }
                     updateLabels();
                 });
