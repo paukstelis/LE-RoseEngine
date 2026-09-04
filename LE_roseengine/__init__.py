@@ -182,6 +182,8 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
         self.curve_stepdown = float(self._settings.get(["curve_stepdown"]))
         self.curve_retract = bool(self._settings.get(["curve_retract"]))
         self.curve_retract_extra = float(self._settings.get(["curve_retract_extra"]))
+        self.curve_default_dir = float(self._settings.get(["defult_dir"]))
+        #zero, left to right; one, right to left
         self.show_injects = bool(self._settings.get(["show_injects"]))
 
         storage = self._file_manager._storage("local")
@@ -236,6 +238,7 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
             curve_stepdown=0.0,
             curve_retract=False,
             curve_retract_extra=0.0,
+            default_dir=0,
             show_injects=True,
             last_run = []
             )
@@ -1057,6 +1060,9 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
                                     self.curve["dir"] = dirn*-1
                                     self.curve["idx"] = 0
                                     self.curve["diffs"] = np.flip(diffs * -1)
+                                    if self.curve["spiral"]:
+                                        self.curve["spiral"] = self.curve["spiral"] * -1
+                                        self.curve["blah"]*-1
                                     #these are just for record keeping
                                     self.curve["x"] = np.flip(self.curve["x"])
                                     self.curve["z"] = np.flip(self.curve["z"])
