@@ -182,7 +182,7 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
         self.curve_stepdown = float(self._settings.get(["curve_stepdown"]))
         self.curve_retract = bool(self._settings.get(["curve_retract"]))
         self.curve_retract_extra = float(self._settings.get(["curve_retract_extra"]))
-        self.curve_default_dir = float(self._settings.get(["defult_dir"]))
+        self.curve_default_dir = float(self._settings.get(["default_dir"]))
         #zero, left to right; one, right to left
         self.show_injects = bool(self._settings.get(["show_injects"]))
 
@@ -1315,9 +1315,8 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
             self.rr = True
         gcode.append(f"G92 A{theA}")
         return_gcode.append(f"G92 A{theA}")
-        #starting position
-        #starting position
         x,z,a = self.start_coords["x"], self.start_coords["z"], self.start_coords["a"]
+        a = a % 360
         #current position
         cx,cz,ca = self.current_x, self.current_z, self.current_a
         #difference
@@ -1351,12 +1350,9 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
 
         if self.reset_priority == "X" or self.reset_priority == "CURVE":
             gcode.append(retract)
-        if self.reset_priority == "X" or self.reset_priority == "CURVE":
-            gcode.append(retract)
             gcode.append(x_return)
             gcode.append(z_return)
             gcode.append(a_return)
-            return_gcode.append(retract)
             return_gcode.append(retract)
             return_gcode.append(x_gcode)
             return_gcode.append(z_return)
@@ -1364,18 +1360,15 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
 
         if self.reset_priority == "Z":
             gcode.append(retract)
-            gcode.append(retract)
             gcode.append(z_return)
             gcode.append(x_return)
             gcode.append(a_return)
-            return_gcode.append(retract)
             return_gcode.append(retract)
             return_gcode.append(z_gcode)
             return_gcode.append(x_return)
             return_gcode.append(a_gcode)
            
         if self.reset_priority == "none":
-            gcode.append(retract)
             gcode.append(retract)
             gcode.append(f"G94 G90 G0 Z{z} X{x}")
             gcode.append(f"G0 A{a}")

@@ -61,6 +61,7 @@ $(function() {
         //self.curve_dir = ko.observable(1);
         self.curve_start = ko.observable(0);
         self.curve_stop = ko.observable(0);
+        self.curve_default_dir = ko.observable(0);
         self.recip = ko.observable(true);
         self.helical = ko.observable(0.0);
 
@@ -289,6 +290,7 @@ $(function() {
             self.curve_stepdown(self.settings.curve_stepdown());
             self.curve_retract(self.settings.curve_retract());
             self.curve_retract_extra(self.settings.curve_retract_extra());
+            self.curve_default_dir(self.settings.default_dir());
             self.exp(self.settings.exp());
 
             self.r_radius = self.settings.r_radius();
@@ -514,9 +516,14 @@ $(function() {
                     edits: { shapePosition: true }
                 });
 
-                // Default x values from the initial shapes
-                let startX = plotDiv._fullLayout.shapes[0].x0.toFixed(1);
-                let endX   = plotDiv._fullLayout.shapes[1].x0.toFixed(1);
+                let startX, endX;
+                if (self.curve_default_dir() == 1) {
+                    startX = plotDiv._fullLayout.shapes[1].x0.toFixed(1);
+                    endX   = plotDiv._fullLayout.shapes[0].x0.toFixed(1);
+                } else {
+                    startX = plotDiv._fullLayout.shapes[0].x0.toFixed(1);
+                    endX   = plotDiv._fullLayout.shapes[1].x0.toFixed(1);
+                }
 
                 // --- Reuse or create label container (avoid duplicates on reload) ---
                 let labelContainer = document.getElementById('curve-marker-labels');
@@ -527,11 +534,11 @@ $(function() {
 
                     const startLabel = document.createElement('span');
                     startLabel.id = 'curve-label-start';
-                    startLabel.style.color = 'green';
+                    //startLabel.style.color = 'green';
 
                     const endLabel = document.createElement('span');
                     endLabel.id = 'curve-label-end';
-                    endLabel.style.color = 'red';
+                    //endLabel.style.color = 'red';
 
                     labelContainer.appendChild(startLabel);
                     labelContainer.appendChild(endLabel);
@@ -547,15 +554,22 @@ $(function() {
 
                 updateLabels();
 
-                // --- Update labels when markers are dragged ---
-                // Remove any prior listener by replacing the div's plotly binding
                 plotDiv.removeAllListeners('plotly_relayout');
                 plotDiv.on('plotly_relayout', function (eventData) {
-                    if ('shapes[0].x0' in eventData) {
-                        startX = parseFloat(eventData['shapes[0].x0']).toFixed(2);
-                    }
-                    if ('shapes[1].x0' in eventData) {
-                        endX = parseFloat(eventData['shapes[1].x0']).toFixed(2);
+                    if (self.curve_default_dir() == 1) {
+                        if ('shapes[0].x0' in eventData) {
+                            endX = parseFloat(eventData['shapes[0].x0']).toFixed(2);
+                        }
+                        if ('shapes[1].x0' in eventData) {
+                            startX = parseFloat(eventData['shapes[1].x0']).toFixed(2);
+                        }
+                    } else {
+                        if ('shapes[0].x0' in eventData) {
+                            startX = parseFloat(eventData['shapes[0].x0']).toFixed(2);
+                        }
+                        if ('shapes[1].x0' in eventData) {
+                            endX = parseFloat(eventData['shapes[1].x0']).toFixed(2);
+                        }
                     }
                     updateLabels();
                 });
