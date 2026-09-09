@@ -976,6 +976,9 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
             phasecmds.append(f"G0 G91 X{pump_rad_start:0.4f}")
             self._logger.debug(f"pump phase offset X value: {pump_rad_start}, phasecmds: {phasecmds}")
 
+        if len(self.curve["diffs"]):
+            self._logger.debug(self.curve)
+
         try:
             bf_target = self.bf_target
             degrees_sec = (self.rpm * 360) / 60
@@ -1003,8 +1006,8 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
             if not self.forward:
                 self.working_angles = self.working_angles*-1
                 #reverse the spiral direction so it gets added to a moves
-                if self.curve["spiral"]:
-                    self.curve["spiral"] = self.curve["spiral"]*-1
+                #if self.curve["spiral"]:
+                #    self.curve["spiral"] = self.curve["spiral"]*-1
             count = 0
             while self.running:
 
@@ -1060,9 +1063,9 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
                                     self.curve["dir"] = dirn*-1
                                     self.curve["idx"] = 0
                                     self.curve["diffs"] = np.flip(diffs * -1)
-                                    if self.curve["spiral"]:
-                                        self.curve["spiral"] = self.curve["spiral"] * -1
-                                        self.curve["blah"]*-1
+                                    #if self.curve["spiral"]:
+                                    #    self.curve["spiral"] = self.curve["spiral"] * -1
+                                    #    self.curve["blah"]*-1
                                     #these are just for record keeping
                                     self.curve["x"] = np.flip(self.curve["x"])
                                     self.curve["z"] = np.flip(self.curve["z"])
