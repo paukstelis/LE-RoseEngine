@@ -512,68 +512,129 @@ $(function() {
                 const plotDiv = document.getElementById('pumparea');
 
                 Plotly.newPlot(plotDiv, data.graph.data, data.graph.layout, {
-                    displayModeBar: false,
-                    edits: { shapePosition: true }
+                    displayModeBar: false
+                    // No edits.shapePosition — sliders drive the markers now
                 });
 
-                let startX, endX;
-                if (self.curve_default_dir() == 1) {
-                    startX = plotDiv._fullLayout.shapes[1].x0.toFixed(1);
-                    endX   = plotDiv._fullLayout.shapes[0].x0.toFixed(1);
-                } else {
-                    startX = plotDiv._fullLayout.shapes[0].x0.toFixed(1);
-                    endX   = plotDiv._fullLayout.shapes[1].x0.toFixed(1);
-                }
+                // Read axis range from the rendered layout
+                const xRange = plotDiv._fullLayout.xaxis.range;
+                const xMin   = parseFloat(xRange[0].toFixed(1));
+                const xMax   = parseFloat(xRange[1].toFixed(1));
 
-                // --- Reuse or create label container (avoid duplicates on reload) ---
-                let labelContainer = document.getElementById('curve-marker-labels');
-                if (!labelContainer) {
-                    labelContainer = document.createElement('div');
-                    labelContainer.id = 'curve-marker-labels';
-                    labelContainer.style.cssText = 'display:flex; gap:16px; font-size:13px; margin-bottom:2px; padding-left:4px;';
+                // Initial marker positions driven by curve_default_dir:
+                //   dir == 1 → Start at xMax, Stop at xMin (reversed traversal)
+                //   else     → Start at xMin, Stop at xMax
+                const dir = self.curve_default_dir();
+                let startX = (dir == 1) ? xMax : xMin;
+                let endX   = (dir == 1) ? xMin : xMax;
 
-                    const startLabel = document.createElement('span');
-                    startLabel.id = 'curve-label-start';
-                    //startLabel.style.color = 'green';
-
-                    const endLabel = document.createElement('span');
-                    endLabel.id = 'curve-label-end';
-                    //endLabel.style.color = 'red';
-
-                    labelContainer.appendChild(startLabel);
-                    labelContainer.appendChild(endLabel);
-                    plotDiv.parentNode.insertBefore(labelContainer, plotDiv);
-                }
-
-                function updateLabels() {
-                    document.getElementById('curve-label-start').innerHTML = `<b>Start:</b> ${startX}`;
-                    document.getElementById('curve-label-end').innerHTML   = `<b>Stop:</b> ${endX}`;
-                    self.curve_start(startX);
-                    self.curve_stop(endX);
-                }
-
-                updateLabels();
-
-                plotDiv.removeAllListeners('plotly_relayout');
-                plotDiv.on('plotly_relayout', function (eventData) {
-                    if (self.curve_default_dir() == 1) {
-                        if ('shapes[0].x0' in eventData) {
-                            endX = parseFloat(eventData['shapes[0].x0']).toFixed(2);
-                        }
-                        if ('shapes[1].x0' in eventData) {
-                            startX = parseFloat(eventData['shapes[1].x0']).toFixed(2);
-                        }
-                    } else {
-                        if ('shapes[0].x0' in eventData) {
-                            startX = parseFloat(eventData['shapes[0].x0']).toFixed(2);
-                        }
-                        if ('shapes[1].x0' in eventData) {
-                            endX = parseFloat(eventData['shapes[1].x0']).toFixed(2);
-                        }
-                    }
-                    updateLabels();
+                // Move the Plotly shapes to match the initial positions
+                Plotly.relayout(plotDiv, {
+                    'shapes[0].x0': startX, 'shapes[0].x1': startX,
+                    'shapes[1].x0': endX,   'shapes[1].x1': endX
                 });
+
+                // Update curve_start / curve_stop observables
+                function syncObservables() {
+                    self.curve_start(parseFloat(startX).toFixed(1));
+                    self.curve_stop(parseFloat(endX).toFixed(1));
+                }
+                syncObservables();
+
+                // --- Reuse or create slider container (safe across curve reloads) ---
+                let sliderContainer = document.getElementById('curve-slider-container');
+                if (!sliderContainer) {
+                    sliderContainer = document.createElement('div');
+                    sliderContainer.id = 'curve-slider-container';
+                    sliderContainer.style.cssText = 'padding: 2px 6px 6px; font-size: 13px;';
+
+                    sliderContainer.innerHTML = `
+                        <div style="display:flex; align-items:center; gap:8px; margin-bottom:3px;">
+                            <span style="color:green; min-width:52px;"><b>Start:</b></span>
+                            <input type="range" id="curve-start-slider" style="flex:1;">
+                            <input type="number" id="curve-start-val"
+                                style="color:green; width:58px; text-align:right; border:1px solid #ccc; border-radius:3px; padding:1px 3px;">
+                        </div>
+                        <div style="display:flex; align-items:center; gap:8px;">
+                            <span style="color:red; min-width:52px;"><b>Stop:</b></span>
+                            <input type="range" id="curve-stop-slider" style="flex:1;">
+                            <input type="number" id="curve-stop-val"
+                                style="color:red; width:58px; text-align:right; border:1px solid #ccc; border-radius:3px; padding:1px 3px;">
+                        </div>
+                    `;
+
+                    // Insert immediately below the plot div
+                    plotDiv.parentNode.insertBefore(sliderContainer, plotDiv.nextSibling);
+                }
+
+                const startSlider = document.getElementById('curve-start-slider');
+                const stopSlider  = document.getElementById('curve-stop-slider');
+                const startValEl  = document.getElementById('curve-start-val');
+                const stopValEl   = document.getElementById('curve-stop-val');
+
+                // Configure sliders to match the current curve's x range
+                [startSlider, stopSlider].forEach(s => {
+                    s.min  = xMin;
+                    s.max  = xMax;
+                    s.step = 0.05;
+                });
+
+                // Set initial slider and input values
+                startSlider.value    = startX;
+                stopSlider.value     = endX;
+                startValEl.min       = xMin; startValEl.max = xMax; startValEl.step = 0.1;
+                stopValEl.min        = xMin; stopValEl.max  = xMax; stopValEl.step  = 0.1;
+                startValEl.value     = parseFloat(startX).toFixed(2);
+                stopValEl.value      = parseFloat(endX).toFixed(2);
+
+                // Update a Plotly shape's x position without a full redraw
+                function updateShape(index, x) {
+                    const upd = {};
+                    upd[`shapes[${index}].x0`] = x;
+                    upd[`shapes[${index}].x1`] = x;
+                    Plotly.relayout(plotDiv, upd);
+                }
+
+                // --- Slider → shape + number input (no cross-prevention: they can pass freely) ---
+                startSlider.oninput = function () {
+                    startX = parseFloat(this.value);
+                    startValEl.value = startX.toFixed(2);
+                    updateShape(0, startX);
+                    syncObservables();
+                };
+
+                stopSlider.oninput = function () {
+                    endX = parseFloat(this.value);
+                    stopValEl.value = endX.toFixed(2);
+                    updateShape(1, endX);
+                    syncObservables();
+                };
+
+                // --- Number input → slider + shape (clamp to axis range) ---
+                startValEl.onchange = function () {
+                    let val = parseFloat(this.value);
+                    if (isNaN(val)) { this.value = parseFloat(startX).toFixed(1); return; }
+                    val = Math.min(Math.max(val, xMin), xMax);
+                    startX = parseFloat(val.toFixed(2));
+                    this.value       = startX.toFixed(2);
+                    startSlider.value = startX;
+                    updateShape(0, startX);
+                    syncObservables();
+                };
+
+                stopValEl.onchange = function () {
+                    let val = parseFloat(this.value);
+                    if (isNaN(val)) { this.value = parseFloat(endX).toFixed(1); return; }
+                    val = Math.min(Math.max(val, xMin), xMax);
+                    endX = parseFloat(val.toFixed(2));
+                    this.value      = endX.toFixed(2);
+                    stopSlider.value = endX;
+                    updateShape(1, endX);
+                    syncObservables();
+                };
             }
+
+
 
             if (plugin == 'roseengine' && data.type == 'pump') {
                 self.radii_pump = data.radii;

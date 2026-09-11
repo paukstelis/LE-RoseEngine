@@ -11,7 +11,7 @@
 
 #rock_area, #pump_area {
     flex: 1;
-}
+} 
 
 .needs-reset {
     outline: 2px solid #F44336 !important;

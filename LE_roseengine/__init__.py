@@ -1009,7 +1009,7 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
                 #if self.curve["spiral"]:
                 #    self.curve["spiral"] = self.curve["spiral"]*-1
             count = 0
-            while self.running:
+            while self.running: 
 
                 self.buffer = 0
                 degrees_sec = (self.rpm * 360) / 60
@@ -1047,7 +1047,8 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
                     xchunk = self.working_x[i:i+self.chunk]
                     modchunk = self.working_mod[i:i+self.chunk]
                     curvechunk = []
-                    if self.curve["active"] and len(self.curve["diffs"]):
+                    debug_break = False
+                    if self.curve["active"] and len(self.curve["diffs"]):      
                         diffs = self.curve["diffs"]
                         dirn = self.curve["dir"]
                         while len(curvechunk) < len(achunk):
@@ -1057,8 +1058,8 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
                             curvechunk.extend(take)
                             self.curve["idx"] = idx + len(take)
                             if self.curve["idx"] >= len(diffs):
-                                if self.curve_spiral:
-                                    break
+                                if debug_break:
+                                    self.running = False
                                 if self.curve_recip:
                                     self.curve["dir"] = dirn*-1
                                     self.curve["idx"] = 0
@@ -1083,15 +1084,13 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
                     chunk_distance = 0
                     #tofix
                     current_angle = track["a"]
-                    
+                    adecimals = 6
                     for c in range(0, len(achunk)):
                         a = achunk[c]
                         z = zchunk[c]
                         x = xchunk[c]
                         m = modchunk[c]
-                        track["z"] = track["z"] + z
-                        track["x"] = track["x"] + x
-                        track["a"] = track["a"] + a
+
 
                         if self.b_adjust:
                             bangle = math.radians(self.current_b - self.bref) *-1
@@ -1105,7 +1104,8 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
                             try:
                                 z = z + curvechunk[c]
                                 x = x + (self.curve["xstep"] * self.curve["dir"])
-                                if self.curve["active"] and self.curve["spiral"]:
+                                if self.curve["spiral"]:
+                                    adecimals = 10
                                     a = a + self.curve["spiral"] 
                             except:
                                 self._logger.info(f"Curve step out of range must be reversing, direction is now {self.curve['dir']}")
@@ -1123,8 +1123,10 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
                             #calculate the chunk distance
                             arc = track["z"] * math.radians(self.a_inc)
                             chunk_distance = chunk_distance + math.sqrt(arc**2 + x**2 + z**2)
-
-                        cmdlist.append(f"G93 G91 G1 X{x:0.6f} A{a:0.6f} Z{z:0.6f} F{feed:0.1f}")
+                        track["z"] = track["z"] + z
+                        track["x"] = track["x"] + x
+                        track["a"] = track["a"] + a
+                        cmdlist.append(f"G93 G91 G1 X{x:0.6f} A{a:0.{adecimals}f} Z{z:0.6f} F{feed:0.1f}")
                     
                     if self.laser and chunk_distance and self.power_correct:
                         #figure out scaling of power here
@@ -1184,6 +1186,7 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
                     cmdlist = []
                     self.last_position = i
                     if not self.running:
+                        self._logger.debug(f"tracked position, X: {track['x']}, Z: {track['z']}, A: {track['a']}")
                         break
                 if self.laser and self.laser_stop:
                     self.running = False
@@ -1234,7 +1237,8 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
             working_z = np.zeros_like(self.pump_main["radii"])
 
         #handle curvilinear
-        if self.curve["active"] and len(self.curve["x"]):
+        if len(self.curve["x"]): #just indicates it is loaded
+            self.curve['active'] = True
             #rename start and stop
             if self.curve_start > self.curve_stop:
                 large,small = self.curve_start, self.curve_stop
