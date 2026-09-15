@@ -95,7 +95,7 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
         self.a_spline = None
         self.pump_profile = None
         #Curvilinear parameters
-        self.curve = {"active" : False, "diffs" : [], "min": 0.0, "max": 0.0, "length": 0.0, "spiral": 0.0}
+        self.curve = {"active" : False, "diffs" : [], "min": 0.0, "max": 0.0, "length": 0.0, "spiral": 0.0, "x": [],"z": []}
         self.curve_mm_rev = 0.0
         self.curve_recip = True
         self.curve_stepdown = 0.0
@@ -1236,7 +1236,7 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
         else:
             working_z = np.zeros_like(self.pump_main["radii"])
 
-        #handle curvilinear
+        #handle curvilinear, no good way to know that a file is loaded and we are going touse it.
         if len(self.curve["x"]): #just indicates it is loaded
             self.curve['active'] = True
             #rename start and stop
@@ -1323,7 +1323,10 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
         gcode.append(f"G92 A{theA}")
         return_gcode.append(f"G92 A{theA}")
         x,z,a = self.start_coords["x"], self.start_coords["z"], self.start_coords["a"]
-        a = a % 360
+        self._logger.info(f"Start coords were: {x}, {z}, {a}")
+        if a != 0.0:
+            a = a % 360
+        self._logger.info(f"Modulated A is {a}")
         #current position
         cx,cz,ca = self.current_x, self.current_z, self.current_a
         #difference
@@ -1804,7 +1807,7 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
             path = data["path"]
             self.curve_mm_rev = float(data["mm_rev"])
             
-            if path is not "None":
+            if path != "None":
                 self.load_curve(path)
                 json_figure = self._plot_curve(lc="black")
                 returndata = dict(type="curve", graph=json_figure)
@@ -2009,7 +2012,8 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
             if data["type"] == "pump":
                 self.pump_main = {"type":None}
                 self.pump_work = []
-                self.curve = {"active": False, "diffs": [], "min": 0.0, "max": 0.0, "length": 0.0, "spiral": 0.0}
+                self.curve = {"active" : False, "diffs" : [], "min": 0.0, "max": 0.0, "length": 0.0, "spiral": 0.0, "x": [],"z": []}
+
             return
 
         if command == "update_rpm":
