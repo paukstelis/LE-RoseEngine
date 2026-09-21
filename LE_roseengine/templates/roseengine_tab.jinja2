@@ -138,8 +138,16 @@
                                 <select id="curve_select" data-bind=""></select>
                             </div>
                             <div class="re-field">
-                                <label title="Helical rotation incremented over the length of the curvilinear pattern" for="helical">Helical rotation:</label>
-                                <input id="helical" type="number" step="any" data-bind="value: helical">
+                                <label title="Starting helical rotation. Use only this value if you want uniform rotation." for="helical1">Helical rotation (start):</label>
+                                <input id="helical1" type="number" step="any" data-bind="value: helical1">
+                            </div>
+                            <div class="re-field">
+                                <label title="Ending helical rotation. Ignored if no starting value is given above." for="helical2">Helical rotation (end):</label>
+                                <input id="helical2" type="number" step="any" data-bind="value: helical2">
+                            </div>
+                             <div class="re-checkbox">
+                                <input id="hel_calc" type="checkbox" checked data-bind="checked: full_helical_calc">
+                                <label title="Calculate helical rotation over full profile length if checked" for="hel_calc">Full-length helical calculation</label>
                             </div>
                             <div class="re-checkbox">
                                 <input id="recip" type="checkbox" checked data-bind="checked: recip">

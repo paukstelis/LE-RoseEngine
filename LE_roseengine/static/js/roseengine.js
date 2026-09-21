@@ -63,7 +63,9 @@ $(function() {
         self.curve_stop = ko.observable(0);
         self.curve_default_dir = ko.observable(0);
         self.recip = ko.observable(true);
-        self.helical = ko.observable(0.0);
+        self.helical1 = ko.observable(0.0);
+        self.helical2 = ko.observable(0.0);
+        self.full_helical_calc = ko.observable(false);
 
         self.curve_retract = ko.observable(0.0);
         self.curve_retract_extra = ko.observable(0.0);
@@ -515,11 +517,12 @@ $(function() {
                     displayModeBar: false
                     // No edits.shapePosition — sliders drive the markers now
                 });
-
-                // Read axis range from the rendered layout
-                const xRange = plotDiv._fullLayout.xaxis.range;
-                const xMin   = parseFloat(xRange[0].toFixed(1));
-                const xMax   = parseFloat(xRange[1].toFixed(1));
+                console.log(data.graph.data);
+                // Read axis range
+                const xData = data.graph.data[0].x._inputArray;
+                const xMin  = parseFloat(Math.min.apply(null, xData).toFixed(1));
+                const xMax  = parseFloat(Math.max.apply(null, xData).toFixed(1));
+                console.log("xMin is" + xMin +" xMax is" + xMax);
 
                 // Initial marker positions driven by curve_default_dir:
                 //   dir == 1 → Start at xMax, Stop at xMin (reversed traversal)
@@ -597,14 +600,20 @@ $(function() {
 
                 // --- Slider → shape + number input (no cross-prevention: they can pass freely) ---
                 startSlider.oninput = function () {
-                    startX = parseFloat(this.value);
+                    let val = parseFloat(this.value);
+                    val = Math.min(Math.max(val, xMin), xMax);
+                    startX = val;
+                    this.value = startX;
                     startValEl.value = startX.toFixed(2);
                     updateShape(0, startX);
                     syncObservables();
                 };
 
                 stopSlider.oninput = function () {
-                    endX = parseFloat(this.value);
+                    let val = parseFloat(this.value);
+                    val = Math.min(Math.max(val, xMin), xMax);
+                    endX = val;
+                    this.value = endX;
                     stopValEl.value = endX.toFixed(2);
                     updateShape(1, endX);
                     syncObservables();
@@ -899,7 +908,9 @@ $(function() {
                 curve_start: self.curve_start(),
                 curve_stop: self.curve_stop(),
                 recip: self.recip(),
-                helical: self.helical(),
+                helical1: self.helical1(),
+                helical2: self.helical2(),
+                full_calc: self.full_helical_calc(),
                 curve_retract: self.curve_retract(),
                 curve_retract_extra: self.curve_retract_extra(),
                 curve_stepdown: self.curve_stepdown(),   

@@ -102,7 +102,8 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
         #self.curve_dir = "l2r"
         self.curve_start = 0.0
         self.curve_stop = 0.0
-        self.curve_spiral = 0.0
+        self.curve_spiral_start = 0.0
+        self.curve_sprial_end = 0.0
 
         self.write_mode = False
         self.inch = False
@@ -477,22 +478,73 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
         self._logger.info(f"injected, orig: {orig_cmd}, new: {cmd}")
         return cmd
     
-    def resample_offset(self, radii, angles, offset=0.0):
+    def resample_offset(self, radii, angles, offset=0.0, reversal_step_threshold=3.0):
+        radii  = np.asarray(radii,  dtype=float)
+        angles = np.asarray(angles, dtype=float)
 
+        # ── Cartesian shift ──────────────────────────────────────────────────────
         ang_rad = np.deg2rad(angles)
-        # to Cartesian coordinates
         x = radii * np.cos(ang_rad)
         y = radii * np.sin(ang_rad)
-        x2 = x + offset
-        y2 = y 
+        x2 = x + offset          # eccentric offset along X only
+        y2 = y
 
-        # convert back to polar
-        offset_radii  = np.hypot(x2, y2)
+        # ── Back to polar ────────────────────────────────────────────────────────
+        offset_radii   = np.hypot(x2, y2)
         offset_radians = np.arctan2(y2, x2)
-        offset_radians = np.unwrap(offset_radians)
-        offset_angles = np.rad2deg(offset_radians)
+        offset_radians = np.unwrap(offset_radians)          # fix ±π wrap-arounds
+        offset_angles  = np.rad2deg(offset_radians)
 
-        return offset_radii, offset_angles
+        # Normalise so the first sample sits at 0°
+        offset_angles -= offset_angles[0]
+
+        # ── Direction-reversal diagnostic ────────────────────────────────────────
+        diffs       = np.diff(offset_angles)
+        abs_diffs   = np.abs(diffs)
+        n_reversals = int(np.sum(diffs < 0))
+
+        # Target sample count – match what load_rosette / _parametric_sine produce
+        n_target      = len(np.arange(0, 360, self.a_inc))
+        median_step   = float(np.median(abs_diffs))
+        threshold     = reversal_step_threshold * median_step
+
+        if n_reversals == 0:
+            loop_angles = np.append(offset_angles, offset_angles[-1] + median_step)
+            loop_radii  = np.append(offset_radii,  offset_radii[0])
+            uniform_angles = np.arange(0, 360, self.a_inc)
+            uniform_radii  = np.interp(uniform_angles, loop_angles, loop_radii)
+            return uniform_radii, uniform_angles
+
+        dense_x = [x2[0]]
+        dense_y = [y2[0]]
+
+        for i in range(len(x2) - 1):
+            if abs_diffs[i] > threshold:
+                # Number of extra points needed to subdivide the large step
+                n_insert = int(np.ceil(abs_diffs[i] / median_step)) - 1
+                for k in range(1, n_insert + 1):
+                    t = k / (n_insert + 1)
+                    dense_x.append(x2[i] + t * (x2[i + 1] - x2[i]))
+                    dense_y.append(y2[i] + t * (y2[i + 1] - y2[i]))
+            dense_x.append(x2[i + 1])
+            dense_y.append(y2[i + 1])
+
+        dense_x = np.array(dense_x)
+        dense_y = np.array(dense_y)
+
+        # Recompute polar from the densified Cartesian points
+        dense_radii  = np.hypot(dense_x, dense_y)
+        dense_rads   = np.arctan2(dense_y, dense_x)
+        dense_rads   = np.unwrap(dense_rads)
+        dense_angles = np.rad2deg(dense_rads)
+        dense_angles -= dense_angles[0]
+
+        t_src = np.linspace(0.0, 1.0, len(dense_radii))
+        t_dst = np.linspace(0.0, 1.0, n_target)
+        uniform_radii  = np.interp(t_dst, t_src, dense_radii)
+        uniform_angles = np.interp(t_dst, t_src, dense_angles)
+
+        return uniform_radii, uniform_angles
 
     def resample_path_to_polar(self, path, center=None, radial_offset=0.0):
         if not center:
@@ -1047,7 +1099,7 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
                     xchunk = self.working_x[i:i+self.chunk]
                     modchunk = self.working_mod[i:i+self.chunk]
                     curvechunk = []
-                    debug_break = False
+                    debug_break = True
                     if self.curve["active"] and len(self.curve["diffs"]):      
                         diffs = self.curve["diffs"]
                         dirn = self.curve["dir"]
@@ -1057,6 +1109,7 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
                             take = diffs[idx:idx + need]
                             curvechunk.extend(take)
                             self.curve["idx"] = idx + len(take)
+                            spiral_inc = self.curve["spiral_inc"]*idx
                             if self.curve["idx"] >= len(diffs):
                                 if debug_break:
                                     self.running = False
@@ -1106,7 +1159,7 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
                                 x = x + (self.curve["xstep"] * self.curve["dir"])
                                 if self.curve["spiral"]:
                                     adecimals = 10
-                                    a = a + self.curve["spiral"] 
+                                    a = a + self.curve["spiral"] + spiral_inc
                             except:
                                 self._logger.info(f"Curve step out of range must be reversing, direction is now {self.curve['dir']}")
                         if self.use_scan:
@@ -1237,7 +1290,7 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
             working_z = np.zeros_like(self.pump_main["radii"])
 
         #handle curvilinear, no good way to know that a file is loaded and we are going touse it.
-        if len(self.curve["x"]): #just indicates it is loaded
+        if len(self.curve["x"]) and not self.pump_main["type"]: #just indicates it is loaded and not vestigial
             self.curve['active'] = True
             #rename start and stop
             if self.curve_start > self.curve_stop:
@@ -1271,11 +1324,28 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
                 self.curve["diffs"] = np.flip(self.curve["diffs"]*-1) 
             else:
                 self.curve["dir"] = 1
+
+            if self.curve_spiral_start and not self.curve_spiral_end:
+                if self.full_calc:
+                    thesteps = int(self.curve["length"]/mm_per_step)
+                else:
+                    thesteps = len(self.curve['diffs'])
+
+                self.curve["spiral"] = self.curve_spiral_start / thesteps
+                self.curve["spiral_inc"] = 0.0
   
-            if self.curve_spiral:
-                self.curve["spiral"] = self.curve_spiral / len(self.curve['diffs'])
+            if self.curve_spiral_start and self.curve_spiral_end:
+                if self.full_calc:
+                    thesteps = int(self.curve["length"]/mm_per_step)
+                else:
+                    thesteps = len(self.curve['diffs'])
+                self.curve["spiral"] = self.curve_spiral_start / thesteps
+                end_spiral = self.curve_spiral_end / thesteps
+                self.curve["spiral_inc"] = (end_spiral-self.curve["spiral"])/thesteps
+
             else:
                 self.curve["spiral"] = 0.0
+                self.curve["spiral_inc"] = 0.0
 
         if self.ellipse:
             e_vals = []
@@ -1497,7 +1567,7 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
             showlegend=False,
             title=dict(),
         )
-
+        self._logger.debug(f"start_x: {start_x} {x_min}, end_x{end_x} {x_max}, ymin/max: {y_min} {y_max}")
         return fig.to_plotly_json()
 
     def geo_gcode(self, radii, angles):
@@ -1701,6 +1771,8 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
                 data = dict(type="rock", special=s, graph=json_figure)
                 
             elif type == "pump":
+                #reset curvilinear here for safety
+                self.curve = {"active" : False, "diffs" : [], "min": 0.0, "max": 0.0, "length": 0.0, "spiral": 0.0, "x": [],"z": []}
                 self.p_amp = float(data["p_amp"])
                 self.pump_main = rosette
                 self.pump_main["radii"] = np.array(self.pump_main["radii"]) * self.p_amp
@@ -1911,11 +1983,14 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
             self.curve_start = float(data["curve_start"])
             self.curve_stop = float(data["curve_stop"])
             self.curve_recip = bool(data["recip"]) 
-            self.curve_spiral = float(data["helical"])
+            self.curve_spiral_start = float(data["helical1"])
+            self.curve_spiral_end = float(data["helical2"])
             self.curve_mm_rev = float(data["mm_rev"])
             self.curve_retract = float(data["curve_retract"])
             self.curve_retract_extra = float(data["curve_retract_extra"])
             self.curve_stepdown = float(data["curve_stepdown"])
+            self.full_calc = bool(data["full_calc"])
+
             self._logger.info("ready to start job")
             if float(data["e_ratio"]) > 1.0 and not self.rock_main["type"] == "geometric":
                 rad = float(data["e_rad"])
