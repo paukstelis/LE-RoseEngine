@@ -1099,7 +1099,7 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
                     xchunk = self.working_x[i:i+self.chunk]
                     modchunk = self.working_mod[i:i+self.chunk]
                     curvechunk = []
-                    debug_break = True
+                    debug_break = False
                     if self.curve["active"] and len(self.curve["diffs"]):      
                         diffs = self.curve["diffs"]
                         dirn = self.curve["dir"]

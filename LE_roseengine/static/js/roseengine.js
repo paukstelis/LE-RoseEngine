@@ -506,7 +506,7 @@ $(function() {
             }
 
             if (plugin == 'roseengine' && data.type == 'geo') {
-                console.log(data.graph);
+                //console.log(data.graph);
                 Plotly.newPlot('rockarea', data.graph.data, data.graph.layout, {displayModeBar: false});
             }
 
@@ -517,11 +517,11 @@ $(function() {
                     displayModeBar: false
                     // No edits.shapePosition — sliders drive the markers now
                 });
-                console.log(data.graph.data);
+                //console.log(data.graph.data);
                 // Read axis range
                 const xData = data.graph.data[0].x._inputArray;
-                const xMin  = parseFloat(Math.min.apply(null, xData).toFixed(1));
-                const xMax  = parseFloat(Math.max.apply(null, xData).toFixed(1));
+                const xMin  = parseFloat(Math.min.apply(null, xData).toFixed(2));
+                const xMax  = parseFloat(Math.max.apply(null, xData).toFixed(2));
                 console.log("xMin is" + xMin +" xMax is" + xMax);
 
                 // Initial marker positions driven by curve_default_dir:
@@ -539,8 +539,8 @@ $(function() {
 
                 // Update curve_start / curve_stop observables
                 function syncObservables() {
-                    self.curve_start(parseFloat(startX).toFixed(1));
-                    self.curve_stop(parseFloat(endX).toFixed(1));
+                    self.curve_start(parseFloat(startX).toFixed(2));
+                    self.curve_stop(parseFloat(endX).toFixed(2));
                 }
                 syncObservables();
 
