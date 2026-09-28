@@ -1325,28 +1325,22 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
             else:
                 self.curve["dir"] = 1
 
-            if self.curve_spiral_start and not self.curve_spiral_end:
-                if self.full_calc:
-                    thesteps = int(self.curve["length"]/mm_per_step)
-                else:
-                    thesteps = len(self.curve['diffs'])
-
-                self.curve["spiral"] = self.curve_spiral_start / thesteps
-                self.curve["spiral_inc"] = 0.0
-  
-            if self.curve_spiral_start and self.curve_spiral_end:
-                if self.full_calc:
-                    thesteps = int(self.curve["length"]/mm_per_step)
-                else:
-                    thesteps = len(self.curve['diffs'])
-                self.curve["spiral"] = self.curve_spiral_start / thesteps
-                end_spiral = self.curve_spiral_end / thesteps
-                self.curve["spiral_inc"] = (end_spiral-self.curve["spiral"])/thesteps
-
+            if self.full_calc:
+                thesteps = int(self.curve["length"]/mm_per_step)
             else:
-                self.curve["spiral"] = 0.0
-                self.curve["spiral_inc"] = 0.0
+                thesteps = len(self.curve['diffs'])
 
+            self.curve["spiral"] = 0.0
+            self.curve["spiral_inc"] = 0.0
+            if self.curve_spiral_start:
+                if self.curve_spiral_end:
+                    self.curve["spiral"] = self.curve_spiral_start / thesteps
+                    end_spiral = self.curve_spiral_end / thesteps
+                    self.curve["spiral_inc"] = (end_spiral-self.curve["spiral"])/thesteps
+                else:
+                    self.curve["spiral"] = self.curve_spiral_start / thesteps
+                    self.curve["spiral_inc"] = 0.0
+               
         if self.ellipse:
             e_vals = []
             for deg in np.arange(0, 360, self.a_inc):
