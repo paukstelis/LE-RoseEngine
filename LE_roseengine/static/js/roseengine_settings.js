@@ -14,7 +14,7 @@ $(function() {
             plugin.addAxisRule = function () {
                 var f = $("#axis_first").val();
                 var t = $("#axis_second").val();
-                var sg = $("#axis_sign").val();
+                var sg = $("#axis_sign").val(); 
                 if (!f || !t || !sg) return;
                 plugin.axis_rules.push({ first: f, second: t, sign: sg });
             };

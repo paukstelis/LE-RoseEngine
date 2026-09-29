@@ -52,19 +52,19 @@
                             </select>
         </label>
 
-        <label title="When using an X-scan with pumping, this option will use both the difference distance and the rotational difference when performing Z compensation">
-        <input type="checkbox" data-bind="checked: settings.plugins.roseengine.use_zdiff">   Use positional Z-difference with X-scans
-        </label>
-
         <h3>Curvilinear Options</h3>
 
-            <label>
+            <label> 
             <input type="number" step="any" min="0" max="200" class="input-mini" data-bind="numeric, value: settings.plugins.roseengine.mm_rev"> Millimeter per revolution
             <i class="icon icon-info-sign" title="The X distance traversed per revolution." data-toggle="tooltip"></i>
             </label>
             <label>
             <input type="number" step="any" min="0" max="200" class="input-mini" data-bind="numeric, value: settings.plugins.roseengine.curve_stepdown"> Step down per pass (mm)
             <i class="icon icon-info-sign" title="The Z distance to step down per traversal of the pattern" data-toggle="tooltip"></i>
+            </label>
+            <label>
+            <input type="checkbox" data-bind="checked: settings.plugins.roseengine.default_dir">  Default right-to-left
+            <i class="icon icon-info-sign" title="Settings default starting position at higher X value (right)" data-toggle="tooltip"></i>
             </label>
             <label>
             <input type="checkbox" data-bind="checked: settings.plugins.roseengine.curve_retract">  Retract on reset
