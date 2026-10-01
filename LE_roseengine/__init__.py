@@ -51,11 +51,12 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
         self.chunk = 10
         self.buffer = 0
         self.buffer_received = True
-        #self.modifiers = {"amp": 1, "phase": 0, "forward": True}
+        self.line_count = 500
         np.set_printoptions(suppress=True,precision=3)
         self.b_adjust = False
         self.moveB = False
         self.bref = 0.0
+        self.trinamic = False
 
         self.jobThread = None
         self.buffer = None
@@ -186,6 +187,8 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
         self.curve_default_dir = float(self._settings.get(["default_dir"]))
         #zero, left to right; one, right to left
         self.show_injects = bool(self._settings.get(["show_injects"]))
+        #trinamic
+        self.trinamic = self._settings.global_get(["plugins","latheengraver","trinamic"])
 
         storage = self._file_manager._storage("local")
         
@@ -426,6 +429,10 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
         
         r = (a * b) / np.sqrt((b * np.cos(angle_rad))**2 + (a * np.sin(angle_rad))**2)
         return r
+
+    def do_trinamic(self):
+        self.line_count = 500
+        self._printer.commands(["M911"], force=True)
 
     def _update_injection(self, cmd: str, axis_val: tuple) -> str:
         axis, delta = axis_val
@@ -897,6 +904,12 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
                     self.feedcontrol["current"] = round(time.time() * 1000)
                     self.feedcontrol["next"] = self.feedcontrol["current"] + next_interval
                     cmdlist = []
+                    if self.trinamic:
+                        self.line_count = self.line_count - self.chunk
+                        #self._logger.info(f"Line count={self.line_count}")
+                        if self.line_count <= 0:
+                            cmdlist.append("M911")
+                            self.line_count = 500
                     if not self.running:
                         break
                 if self.laser and self.laser_stop:
@@ -908,7 +921,6 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
                     self.running = False
                     self.rosette_gcode(cmd_buffer)
                 
-    
         except Exception as e:
             self._logger.error(f"Exception in job thread: {e}", exc_info=True)
         self._logger.info("Geometric Thread ended")
@@ -917,7 +929,8 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
 
 
     def _start_geo(self):
-        
+        self.trinamic = self._settings.global_get(["plugins","latheengraver","trinamic"])
+        self.line_count = 500
         self.rock_work = []
         self.pump_work = []
         self._logger.debug("Starting geometric job")
@@ -1144,7 +1157,6 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
                         x = xchunk[c]
                         m = modchunk[c]
 
-
                         if self.b_adjust:
                             bangle = math.radians(self.current_b - self.bref) *-1
                             x = x*math.cos(bangle) + z*math.sin(bangle)
@@ -1238,6 +1250,14 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
                     self.feedcontrol["next"] = self.feedcontrol["current"] + next_interval
                     cmdlist = []
                     self.last_position = i
+
+                    if self.trinamic:
+                        self.line_count = self.line_count - self.chunk
+                        #self._logger.info(f"Line count={self.line_count}")
+                        if self.line_count <= 0:
+                            cmdlist.append("M911")
+                            self.line_count = 500
+
                     if not self.running:
                         self._logger.debug(f"tracked position, X: {track['x']}, Z: {track['z']}, A: {track['a']}")
                         break
@@ -1248,6 +1268,8 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
                 if self.write_mode:
                     self.running = False
                     self.rosette_gcode(cmd_buffer)
+                
+
                 count += 1
         except Exception as e:
             self._logger.error(f"Exception in job thread: {e}", exc_info=True)
@@ -1256,6 +1278,9 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
             self._printer.commands(["S0"])
 
     def _start_job(self):
+        self.trinamic = self._settings.global_get(["plugins","latheengraver","trinamic"])
+        self.line_count = 500
+        self._logger.info(f"Trinamic is: {self.trinamic}")
         if self.running:
             return
         self.rock_work = []
