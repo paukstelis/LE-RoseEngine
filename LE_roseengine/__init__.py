@@ -96,13 +96,14 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
         self.a_spline = None
         self.pump_profile = None
         #Curvilinear parameters
-        self.curve = {"active" : False, "diffs" : [], "min": 0.0, "max": 0.0, "length": 0.0, "spiral": 0.0, "x": [],"z": []}
+        self.curve = {"active" : False, "diffs" : [], "min": 0.0, "max": 0.0, "length": 0.0, "spiral": 0.0, "x": [],"z": [], "ellipse" : False}
         self.curve_mm_rev = 0.0
         self.curve_recip = True
         self.curve_stepdown = 0.0
         #self.curve_dir = "l2r"
         self.curve_start = 0.0
         self.curve_stop = 0.0
+        self.curve_end = False   #end reciprocation after that pass
         self.curve_spiral_start = 0.0
         self.curve_sprial_end = 0.0
 
@@ -1082,9 +1083,6 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
                 time_unit = self.a_inc/degrees_sec * 1000 #ms
                 tms = round(time.time() * 1000)
                 if loop_start:
-                    #test for rock only
-                    #areset = count*360 + self.start_coords["a"]
-                    #cmdlist.append(f"G94 G90 G0 Z{self.start_coords['z']} A{areset}")
                     self._logger.debug(f"loop time ms: {tms - loop_start}")
                     self._logger.debug(f"Z-positiong at loop: {track['z']}")
                     if self.curve["active"]:
@@ -1093,7 +1091,6 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
                 loop_start = tms
                 self.feedcontrol["current"] = tms
                 
-                #first chunk will be full size
                 next_interval = int(degrees_chunk / degrees_sec * 1000)  # in milliseconds
                 self.feedcontrol["next"] = self.feedcontrol["current"] + next_interval
                 current_angle = 0
@@ -1136,7 +1133,12 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
                                     #these are just for record keeping
                                     self.curve["x"] = np.flip(self.curve["x"])
                                     self.curve["z"] = np.flip(self.curve["z"])
-                                    if self.curve_stepdown and not self.inject:
+                                    
+                                    if self.curve_end:
+                                        self.curve["active"] = False
+                                        self.curve_end = False
+
+                                    if self.curve_stepdown and not self.inject and self.curve["active"]:
                                         self.inject = ("Z", -float(self.curve_stepdown))
                                         self._logger.debug("Pass done, injecting step down")
                                     continue
@@ -1162,9 +1164,6 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
                             x = x*math.cos(bangle) + z*math.sin(bangle)
                             z = -x*math.sin(bangle) + z*math.cos(bangle)
 
-                        if self.ellipse:
-                            z = z + m
-
                         if len(curvechunk):
                             try:
                                 z = z + curvechunk[c]
@@ -1172,8 +1171,25 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
                                 if self.curve["spiral"]:
                                     adecimals = 10
                                     a = a + self.curve["spiral"] + spiral_inc
-                            except:
-                                self._logger.info(f"Curve step out of range must be reversing, direction is now {self.curve['dir']}")
+
+                                if self.curve["ellipse"]:
+                                    if self.curve["dir"] < 1:
+                                        mfactor = (len(self.curve["diffs"]) - self.curve["idx"])/len(self.curve["diffs"])
+                                    else:
+                                        mfactor = self.curve["idx"]/len(self.curve["diffs"])
+                                    m = m * mfactor
+                                    #self._logger.info(f"Mfactor is {mfactor}")
+                            except Exception as e:
+                                self._logger.error(
+                                    f"Curve step error: {type(e).__name__}: {e} | "
+                                    f"c={c}, len(curvechunk)={len(curvechunk)}, "
+                                    f"idx={self.curve.get('idx')}, dir={self.curve.get('dir')}, "
+                                    f"spiral={self.curve.get('spiral')}, spiral_inc={self.curve.get('spiral_inc')}",
+                                    exc_info=True
+                                )
+                        if self.ellipse: #default scenario
+                            z = z + m
+
                         if self.use_scan:
                             #just assume we are doing pumping
                             zdiff = profiles.ovality_mod(self,track["x"],track["a"])
@@ -1294,6 +1310,7 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
         #additional array, might want to rethink how this works
         modifier = []
         mod_array = np.array(modifier)
+        self.curve_end = False
         
         if self.pump_main["type"]:
             self.pump_work = self.create_working_path(self.pump_main, self.p_amp)
@@ -1342,6 +1359,11 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
             self.curve["max"] = np.max(self.curve["z"])
 
             self._logger.debug(self.curve)
+            #only if we have elliptical settings CHANGE ME LATER
+            if self.ellipse:
+                self.curve["ellipse"] = True
+            else:
+                self.curve["ellipse"] = False
 
             #reverse direction if stop is less than start
             if self.curve_start > self.curve_stop:
@@ -2011,7 +2033,7 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
             self.full_calc = bool(data["full_calc"])
 
             self._logger.info("ready to start job")
-            if float(data["e_ratio"]) > 1.0 and not self.rock_main["type"] == "geometric":
+            if float(data["e_ratio"]) != 1.0 and not self.rock_main["type"] == "geometric":
                 rad = float(data["e_rad"])
                 ratio = float(data["e_ratio"])
                 self.ellipse = {"a" : rad, "ratio" : ratio }
@@ -2113,11 +2135,22 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
         if command == "update_rpm":
             #coop update_rpm for other things
             self.moveB = bool(data["moveb"])
+            #self.curve_end = bool(data["curve_end"])
             #curvilinear clutch
             if self.curve["active"] and bool(data["clutch"]) == False:
                 self.curve["active"] = False
             if not self.curve["active"] and len(self.curve["diffs"]) and bool(data["clutch"]) == True:
                 self.curve["active"] = True
+            if bool(data["curve_end"]) == True:
+                self.curve_end = True
+                msg=dict(title="Ending reciprocation",
+                      text="Reciprocation will end after this pass. The machine will continue running.",
+                      type="info",
+                      hide=False)
+                self.send_le_error(msg)
+            else:
+                self.curve_end = False
+
             with self.rpm_lock:
                 self.updated_rpm = float(data["rpm"])
             return

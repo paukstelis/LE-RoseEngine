@@ -58,6 +58,7 @@ $(function() {
         self.curve_stepdown = ko.observable(0.0);
         self.curvilinear = ko.observable(false);
         self.clutch = ko.observable(true);
+        self.curve_end = ko.observable(false); //terminate recip at the end
         //self.curve_dir = ko.observable(1);
         self.curve_start = ko.observable(0);
         self.curve_stop = ko.observable(0);
@@ -693,8 +694,12 @@ $(function() {
                 });
         };
 
-        self.toggle_clutch = function() {
-            self.clutch(!self.clutch());
+        self.toggle_clutch = function(data, event) {
+            if (event && event.shiftKey) {
+                self.curve_end(!self.curve_end());
+            } else {
+                self.clutch(!self.clutch());
+            }
             self.update_rpm();
         };
 
@@ -922,6 +927,7 @@ $(function() {
                     console.log("Start sent");
                     self.running(true);
                     self.need_reset(true);
+                    self.curve_end(false);
                 })
                 .fail(function() {
                     console.error("Start failed");
@@ -957,7 +963,10 @@ $(function() {
                 rpm: self.rpm(),
                 moveb: self.moveb(),
                 clutch: self.clutch(),
+                curve_end: self.curve_end(),
             };
+            //reset this
+            //self.curve_stop(false);
 
             OctoPrint.simpleApiCommand("roseengine", "update_rpm", data)
                 .done(function(response) {
