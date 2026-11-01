@@ -146,6 +146,10 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
         self.current_x = 0.0
         self.current_z = 0.0
 
+        #linuxcnc
+        self.linuxcnc = False
+        self.linuxcnc_q = False
+
         #plotly
         self.go = go
 
@@ -190,7 +194,8 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
         self.show_injects = bool(self._settings.get(["show_injects"]))
         #trinamic
         self.trinamic = self._settings.global_get(["plugins","latheengraver","trinamic"])
-
+        #linuxcnc
+        self.linuxcnc = bool(self._settings.get(["linuxcnc"]))
         storage = self._file_manager._storage("local")
         
         if storage.folder_exists("rosette"):
@@ -245,6 +250,7 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
             curve_retract_extra=0.0,
             default_dir=0,
             show_injects=True,
+            linuxcnc=False,
             last_run = []
             )
     
@@ -311,6 +317,16 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
         profiles.convert_svg(self, SVG)
         self.curve["active"] = True
 
+    def linux_queue(self,value):
+        lcnc = self._plugin_manager.get_plugin("linuxcnc-connector")
+        if lcnc is not None:
+            try:
+                self._logger.info(f"lcnc connector queue mode is: {lcnc.queue_mode}")
+                self._logger.info(f"lcnc.transport queue mode is: {lcnc.LinuxCNCTransport.queue_mode}") 
+                #lcnc.transport.queue_mode = value
+            except:
+                self._logger.info("Couldn't get info")
+    
     def create_working_path(self, rosette, amp):
         rl = rosette["radii"]
         an = rosette["angles"]
@@ -940,6 +956,9 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
         self.start_coords["a"] = self.current_a
         self.running = True
 
+        if self.linuxcnc:
+            self.linux_queue(True)
+
         radii = np.array(self.rock_main["radii"])
         angles = np.array(self.rock_main["angles"])
         num_points = len(radii)
@@ -1311,6 +1330,9 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
         modifier = []
         mod_array = np.array(modifier)
         self.curve_end = False
+
+        if self.linuxcnc:
+            self.linux_queue(True)
         
         if self.pump_main["type"]:
             self.pump_work = self.create_working_path(self.pump_main, self.p_amp)
@@ -1506,7 +1528,10 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
 
         self._printer.commands(gcode)
         if self.relative_return and self.recording:
-            self.recorded.extend(return_gcode)       
+            self.recorded.extend(return_gcode)
+
+        if self.linuxcnc:
+            self.linux_queue(False)    
 
     def _stop_job(self):
         if not self.running:
