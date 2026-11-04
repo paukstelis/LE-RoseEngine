@@ -322,7 +322,7 @@ class RoseenginePlugin(octoprint.plugin.SettingsPlugin,
         if lcnc is not None:
             try:
                 self._logger.info(f"lcnc connector queue mode is: {lcnc.queue_mode}")
-                self._logger.info(f"lcnc.transport queue mode is: {lcnc.queue_mod}") 
+                self._logger.info(f"lcnc.transport queue mode is: {lcnc.transport.queue_mode}") 
                 #lcnc.transport.queue_mode = value
             except:
                 self._logger.info("Couldn't get info")
